@@ -4,11 +4,12 @@ import Home from "./utils/Home";
 import Cars from "./utils/Cars";
 import SignIn from "./utils/SignIn";
 import SignUp from "./utils/SignUp";
-import Order from "./utils/Order";
 import logo from ".././public/rent car.jpg";
 import Book from "./pages/Book";
-import Books from "./pages/Book";
-
+export interface User {
+  email: string;
+  password: string;
+}
 type Lang = "ENG" | "UZB" | "RUS";
 
 const App = () => {
