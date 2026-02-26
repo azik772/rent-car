@@ -170,18 +170,7 @@ const Book = ({ search }: Props) => {
             >
               Hisobingizga kiring yoki yangi hisob yarating
             </p>
-            <div style={{ display: "flex", gap: 12, justifyContent: "center" }}>
-              <button
-                onClick={() => navigate("/signin")}
-                style={{
-                  ...S.btn,
-                  ...S.btnNormal,
-                  width: "auto",
-                  padding: "12px 28px",
-                }}
-              >
-                Kirish
-              </button>
+            <div>
               <button
                 onClick={() => navigate("/signup")}
                 style={{
@@ -213,6 +202,7 @@ const Book = ({ search }: Props) => {
         <div
           style={{
             display: "flex",
+            flexWrap: "wrap",
             alignItems: "flex-end",
             justifyContent: "space-between",
             marginBottom: 40,
@@ -239,12 +229,13 @@ const Book = ({ search }: Props) => {
               border: "1px solid rgba(255,255,255,0.07)",
               borderRadius: 14,
               padding: 4,
+              
             }}
           >
             <button
               onClick={() => setTab("cars")}
               style={{
-                padding: "8px 20px",
+                padding: "4px 15px",
                 borderRadius: 10,
                 border: "none",
                 cursor: "pointer",
@@ -263,10 +254,11 @@ const Book = ({ search }: Props) => {
             <button
               onClick={() => setTab("bookings")}
               style={{
-                padding: "8px 20px",
+                padding: "5px 15px",
                 borderRadius: 10,
                 border: "none",
                 cursor: "pointer",
+              
                 fontSize: 13,
                 fontWeight: 600,
                 transition: "all 0.2s",
@@ -562,7 +554,8 @@ const Book = ({ search }: Props) => {
 const S: Record<string, React.CSSProperties> = {
   page: {
     minHeight: "100vh",
-    background: "linear-gradient(160deg, #07070f 0%, #0d0d1f 60%, #07070f 100%)",
+    background:
+      "linear-gradient(160deg, #07070f 0%, #0d0d1f 60%, #07070f 100%)",
     padding: "48px 20px",
     fontFamily: "'DM Sans', 'Segoe UI', sans-serif",
     color: "#fff",
@@ -606,7 +599,12 @@ const S: Record<string, React.CSSProperties> = {
     gap: 12,
   },
   emptyIcon: { fontSize: 72, filter: "grayscale(1) opacity(0.25)" },
-  emptyTitle: { fontSize: 20, fontWeight: 500, color: "rgba(255,255,255,0.25)", margin: 0 },
+  emptyTitle: {
+    fontSize: 20,
+    fontWeight: 500,
+    color: "rgba(255,255,255,0.25)",
+    margin: 0,
+  },
   emptyText: { fontSize: 13, color: "rgba(255,255,255,0.15)", margin: 0 },
 
   grid: {
@@ -653,7 +651,8 @@ const S: Record<string, React.CSSProperties> = {
   imgGradient: {
     position: "absolute",
     inset: 0,
-    background: "linear-gradient(to top, rgba(7,7,15,0.85) 0%, transparent 55%)",
+    background:
+      "linear-gradient(to top, rgba(7,7,15,0.85) 0%, transparent 55%)",
   },
   badge: {
     position: "absolute",
@@ -1255,4 +1254,3 @@ export default Book;
 // };
 
 // export default Book;
-
