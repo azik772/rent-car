@@ -810,6 +810,452 @@
 // };
 
 // export default Book;
+
+// import {
+//   collection,
+//   addDoc,
+//   getDocs,
+//   query,
+//   where,
+//   deleteDoc,
+//   doc,
+// } from "firebase/firestore";
+// import { db, auth } from "../firebase.config";
+// import { useEffect, useState } from "react";
+// import { onAuthStateChanged } from "firebase/auth";
+// import { useNavigate } from "react-router-dom";
+// import type { Car } from "../utils/Home";
+
+// interface Props {
+//   search: string;
+// }
+
+// interface Booking {
+//   id: string;
+//   carId: string;
+//   userId: string;
+//   name: string;
+//   price: number;
+//   img: string;
+//   category: string;
+//   desc: string;
+//   days: number;
+//   totalPrice: number;
+//   bookedAt: string;
+// }
+
+// const Book = ({ search }: Props) => {
+//   const [cars, setCars] = useState<(Car & { id: string })[]>([]);
+//   const [bookings, setBookings] = useState<Booking[]>([]);
+//   const [days, setDays] = useState<{ [id: string]: number }>({});
+//   const [loading, setLoading] = useState<{ [id: string]: boolean }>({});
+//   const [booked, setBooked] = useState<{ [id: string]: boolean }>({});
+//   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+//   const [, setIsAdmin] = useState(false);
+//   const [tab, setTab] = useState<"cars" | "bookings">("cars");
+//   const navigate = useNavigate();
+
+//   useEffect(() => {
+//     const localUser = localStorage.getItem("user");
+//     if (localUser) {
+//       const userData = JSON.parse(localUser);
+//       if (userData.email === "azizbeknarzullayevo1o@gmail.com") {
+//         setIsAdmin(true);
+//         setCurrentUserId("admin");
+//         getCars();
+//         getBookings("admin");
+//         return;
+//       }
+//     }
+//     const unsubscribe = onAuthStateChanged(auth, (user) => {
+//       if (user) {
+//         setCurrentUserId(user.uid);
+//         getCars();
+//         getBookings(user.uid);
+//       } else {
+//         setCurrentUserId(null);
+//         setBookings([]);
+//       }
+//     });
+//     return () => unsubscribe();
+//   }, []);
+
+//   async function getCars() {
+//     const snapshot = await getDocs(collection(db, "cars"));
+//     const arr = snapshot.docs.map((d) => ({ ...(d.data() as Car), id: d.id }));
+//     setCars(arr);
+//     const initialDays: { [id: string]: number } = {};
+//     arr.forEach((car) => (initialDays[car.id] = 1));
+//     setDays(initialDays);
+//   }
+
+//   async function getBookings(userId: string) {
+//     const q = query(collection(db, "bookings"), where("userId", "==", userId));
+//     const snapshot = await getDocs(q);
+//     const items = snapshot.docs.map((d) => ({
+//       id: d.id,
+//       ...d.data(),
+//     })) as Booking[];
+//     setBookings(items);
+//     const bookedMap: { [id: string]: boolean } = {};
+//     items.forEach((b) => (bookedMap[b.carId] = true));
+//     setBooked(bookedMap);
+//   }
+
+//   async function handleBook(car: Car & { id: string }) {
+//     if (!currentUserId) return;
+//     const carDays = days[car.id] ?? 1;
+//     const totalPrice = (car.price ?? 0) * carDays;
+//     setLoading((prev) => ({ ...prev, [car.id]: true }));
+//     try {
+//       await addDoc(collection(db, "bookings"), {
+//         carId: car.id,
+//         userId: currentUserId,
+//         name: car.name,
+//         price: car.price,
+//         img: car.img,
+//         category: car.category,
+//         desc: car.desc,
+//         days: carDays,
+//         totalPrice,
+//         bookedAt: new Date().toISOString(),
+//       });
+//       getBookings(currentUserId);
+//     } catch (e) {
+//       console.error(e);
+//     } finally {
+//       setLoading((prev) => ({ ...prev, [car.id]: false }));
+//     }
+//   }
+
+//   async function cancelBooking(bookingId: string, carId: string) {
+//     await deleteDoc(doc(db, "bookings", bookingId));
+//     setBooked((prev) => ({ ...prev, [carId]: false }));
+//     if (currentUserId) getBookings(currentUserId);
+//   }
+
+//   // ── Login bo'lmagan ──────────────────────────────────────────────
+//   if (!currentUserId) {
+//     return (
+//       <div className="min-h-screen bg-gradient-to-br from-[#07070f] via-[#0d0d1f] to-[#07070f] flex items-center justify-center px-4">
+//         <div className="bg-white/5 border border-white/10 rounded-3xl p-10 text-center max-w-sm w-full shadow-2xl">
+//           <div className="text-6xl mb-5">🔒</div>
+//           <h2 className="text-white text-xl font-light mb-2">
+//             Ijaraga olish uchun kiring
+//           </h2>
+//           <p className="text-white/40 text-sm mb-8">
+//             Hisobingizga kiring yoki yangi hisob yarating
+//           </p>
+//           <div className="flex flex-col sm:flex-row gap-3">
+//             <button
+//               onClick={() => navigate("/signin")}
+//               className="flex-1 py-3 rounded-xl bg-gradient-to-r from-blue-500 to-indigo-500 text-white font-semibold text-sm hover:opacity-90 transition"
+//             >
+//               Kirish
+//             </button>
+//             <button
+//               onClick={() => navigate("/signup")}
+//               className="flex-1 py-3 rounded-xl bg-white/10 border border-white/10 text-white font-semibold text-sm hover:bg-white/15 transition"
+//             >
+//               Ro'yxatdan o'tish
+//             </button>
+//           </div>
+//         </div>
+//       </div>
+//     );
+//   }
+
+//   const filteredCars = cars.filter((car) =>
+//     car.name?.toLowerCase().includes(search.toLowerCase()),
+//   );
+
+//   return (
+//     <div className="min-h-screen bg-gradient-to-br from-[#07070f] via-[#0d0d1f] to-[#07070f] px-4 sm:px-6 py-10 text-white font-sans">
+//       <div className="max-w-7xl mx-auto">
+//         {/* ── Header + Tabs ── */}
+//         <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-5 mb-10">
+//           {/* Title */}
+//           <div className="relative inline-block">
+//             <h1 className="text-2xl sm:text-3xl font-light tracking-tight text-white">
+//               {tab === "cars" ? "Mashinalar" : "Mening buyurtmalarim"}
+//             </h1>
+//             <p className="text-xs text-white/30 mt-1.5 tracking-wide">
+//               {tab === "cars"
+//                 ? `${filteredCars.length} ta mavjud`
+//                 : `${bookings.length} ta buyurtma`}
+//             </p>
+//             <span className="absolute -bottom-2 left-0 w-12 h-0.5 bg-gradient-to-r from-blue-500 to-indigo-500 rounded-full" />
+//           </div>
+
+//           {/* Tab switcher */}
+//           <div className="flex bg-white/5 border border-white/10 rounded-2xl p-1 w-full sm:w-auto">
+//             <button
+//               onClick={() => setTab("cars")}
+//               className={`flex-1 sm:flex-none px-5 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 ${
+//                 tab === "cars"
+//                   ? "bg-gradient-to-r from-blue-500 to-indigo-500 text-white shadow-lg"
+//                   : "text-white/35 hover:text-white/60"
+//               }`}
+//             >
+//               🚗 Mashinalar
+//             </button>
+//             <button
+//               onClick={() => setTab("bookings")}
+//               className={`flex-1 sm:flex-none px-5 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 flex items-center gap-2 justify-center ${
+//                 tab === "bookings"
+//                   ? "bg-gradient-to-r from-blue-500 to-indigo-500 text-white shadow-lg"
+//                   : "text-white/35 hover:text-white/60"
+//               }`}
+//             >
+//               📋 Buyurtmalarim
+//               {bookings.length > 0 && (
+//                 <span className="bg-white/20 text-white text-xs rounded-full px-2 py-0.5">
+//                   {bookings.length}
+//                 </span>
+//               )}
+//             </button>
+//           </div>
+//         </div>
+
+//         {/* ── MASHINALAR TAB ── */}
+//         {tab === "cars" && (
+//           <>
+//             {filteredCars.length === 0 ? (
+//               <div className="flex flex-col items-center justify-center pt-32 gap-3">
+//                 <span className="text-7xl grayscale opacity-20">🚗</span>
+//                 <h4 className="text-xl font-medium text-white/25">
+//                   Mashina topilmadi
+//                 </h4>
+//                 <p className="text-sm text-white/15">
+//                   Boshqa kalit so'z bilan urinib ko'ring
+//                 </p>
+//               </div>
+//             ) : (
+//               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+//                 {filteredCars.map((car) => {
+//                   const carDays = days[car.id] ?? 1;
+//                   const totalPrice = (car.price ?? 0) * carDays;
+//                   const isBooked = booked[car.id];
+//                   const isLoading = loading[car.id];
+
+//                   return (
+//                     <div
+//                       key={car.id}
+//                       className="group bg-white/[0.04] border border-white/[0.07] rounded-2xl overflow-hidden flex flex-col hover:-translate-y-1.5 hover:bg-white/[0.07] hover:border-blue-500/30 hover:shadow-2xl transition-all duration-300"
+//                     >
+//                       {/* Image */}
+//                       <div className="relative aspect-video overflow-hidden">
+//                         <img
+//                           src={car.img}
+//                           alt={car.name}
+//                           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+//                         />
+//                         <div className="absolute inset-0 bg-gradient-to-t from-[#07070f]/80 to-transparent" />
+//                         <span className="absolute top-3 left-3 bg-blue-500/80 backdrop-blur-md text-white text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-widest">
+//                           {car.category}
+//                         </span>
+//                         {isBooked && (
+//                           <span className="absolute top-3 right-3 bg-emerald-500/85 backdrop-blur-md text-white text-[10px] font-bold px-3 py-1 rounded-full">
+//                             ✓ Buyurtma
+//                           </span>
+//                         )}
+//                       </div>
+
+//                       {/* Body */}
+//                       <div className="p-5 flex flex-col flex-1 gap-3">
+//                         <div>
+//                           <h2 className="text-[15px] font-normal text-white/90 tracking-wide">
+//                             {car.name}
+//                           </h2>
+//                           <p className="text-xs text-white/30 leading-relaxed mt-1 line-clamp-2">
+//                             {car.desc}
+//                           </p>
+//                         </div>
+
+//                         <hr className="border-white/[0.06]" />
+
+//                         {/* Days picker */}
+//                         <div className="bg-white/[0.04] border border-white/[0.07] rounded-xl p-3">
+//                           <label className="text-[11px] text-white/35 block mb-2 tracking-wide">
+//                             🗓 Necha kun?
+//                           </label>
+//                           <div className="flex items-center gap-2">
+//                             <button
+//                               onClick={() =>
+//                                 setDays((prev) => ({
+//                                   ...prev,
+//                                   [car.id]: Math.max(
+//                                     1,
+//                                     (prev[car.id] ?? 1) - 1,
+//                                   ),
+//                                 }))
+//                               }
+//                               className="w-9 h-9 rounded-lg border border-white/10 bg-white/[0.06] text-white text-lg hover:bg-white/10 transition flex items-center justify-center shrink-0"
+//                             >
+//                               −
+//                             </button>
+//                             <input
+//                               type="number"
+//                               min={1}
+//                               value={carDays}
+//                               onChange={(e) =>
+//                                 setDays((prev) => ({
+//                                   ...prev,
+//                                   [car.id]: Math.max(1, Number(e.target.value)),
+//                                 }))
+//                               }
+//                               className="flex-1 text-center bg-white/[0.08] border border-white/10 rounded-lg py-1.5 text-white text-[15px] font-bold outline-none"
+//                             />
+//                             <button
+//                               onClick={() =>
+//                                 setDays((prev) => ({
+//                                   ...prev,
+//                                   [car.id]: (prev[car.id] ?? 1) + 1,
+//                                 }))
+//                               }
+//                               className="w-9 h-9 rounded-lg border border-white/10 bg-white/[0.06] text-white text-lg hover:bg-white/10 transition flex items-center justify-center shrink-0"
+//                             >
+//                               +
+//                             </button>
+//                           </div>
+//                         </div>
+
+//                         {/* Price */}
+//                         <div className="flex justify-between items-center py-1">
+//                           <span className="text-xs text-white/30">
+//                             ${car.price?.toLocaleString()} × {carDays} kun
+//                           </span>
+//                           <span className="text-2xl font-bold text-blue-400 tracking-tight">
+//                             ${totalPrice.toLocaleString()}
+//                           </span>
+//                         </div>
+
+//                         {/* Book button */}
+//                         <button
+//                           onClick={() => handleBook(car)}
+//                           disabled={isLoading || isBooked}
+//                           className={`w-full py-3 rounded-xl text-sm font-semibold tracking-wide transition-all mt-auto ${
+//                             isBooked
+//                               ? "bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 cursor-default"
+//                               : isLoading
+//                                 ? "bg-white/5 text-white/30 cursor-not-allowed"
+//                                 : "bg-gradient-to-r from-blue-500 to-indigo-500 text-white hover:opacity-90 shadow-lg shadow-indigo-500/20"
+//                           }`}
+//                         >
+//                           {isLoading
+//                             ? "⏳ Yuklanmoqda..."
+//                             : isBooked
+//                               ? "✅ Buyurtma berildi!"
+//                               : "Ijaraga olish →"}
+//                         </button>
+//                       </div>
+//                     </div>
+//                   );
+//                 })}
+//               </div>
+//             )}
+//           </>
+//         )}
+
+//         {/* ── BUYURTMALAR TAB ── */}
+//         {tab === "bookings" && (
+//           <>
+//             {bookings.length === 0 ? (
+//               <div className="flex flex-col items-center justify-center pt-32 gap-3">
+//                 <span className="text-7xl grayscale opacity-20">📋</span>
+//                 <h4 className="text-xl font-medium text-white/25">
+//                   Buyurtma yo'q
+//                 </h4>
+//                 <p className="text-sm text-white/15">
+//                   Hali hech qanday mashina ijaraga olinmagan
+//                 </p>
+//               </div>
+//             ) : (
+//               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+//                 {bookings.map((booking) => (
+//                   <div
+//                     key={booking.id}
+//                     className="group bg-white/[0.04] border border-white/[0.07] rounded-2xl overflow-hidden flex flex-col hover:-translate-y-1.5 hover:bg-white/[0.07] hover:border-blue-500/30 hover:shadow-2xl transition-all duration-300"
+//                   >
+//                     {/* Image */}
+//                     <div className="relative aspect-video overflow-hidden">
+//                       <img
+//                         src={booking.img}
+//                         alt={booking.name}
+//                         className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+//                       />
+//                       <div className="absolute inset-0 bg-gradient-to-t from-[#07070f]/80 to-transparent" />
+//                       <span className="absolute top-3 left-3 bg-blue-500/80 backdrop-blur-md text-white text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-widest">
+//                         {booking.category}
+//                       </span>
+//                       <span className="absolute top-3 right-3 bg-emerald-500/85 backdrop-blur-md text-white text-[10px] font-bold px-3 py-1 rounded-full">
+//                         ✓ Aktiv
+//                       </span>
+//                     </div>
+
+//                     {/* Body */}
+//                     <div className="p-5 flex flex-col flex-1 gap-3">
+//                       <div>
+//                         <h2 className="text-[15px] font-normal text-white/90 tracking-wide">
+//                           {booking.name}
+//                         </h2>
+//                         <p className="text-xs text-white/30 leading-relaxed mt-1 line-clamp-2">
+//                           {booking.desc}
+//                         </p>
+//                       </div>
+
+//                       <hr className="border-white/[0.06]" />
+
+//                       {/* Info */}
+//                       <div className="bg-white/[0.04] border border-white/[0.07] rounded-xl p-3 flex flex-col gap-2">
+//                         <div className="flex justify-between items-center">
+//                           <span className="text-xs text-white/35">
+//                             🗓 Muddat
+//                           </span>
+//                           <span className="text-sm text-white font-medium">
+//                             {booking.days} kun
+//                           </span>
+//                         </div>
+//                         <div className="flex justify-between items-center">
+//                           <span className="text-xs text-white/35">🕒 Sana</span>
+//                           <span className="text-xs text-white/70">
+//                             {new Date(booking.bookedAt).toLocaleDateString()}
+//                           </span>
+//                         </div>
+//                       </div>
+
+//                       {/* Price */}
+//                       <div className="flex justify-between items-center py-1">
+//                         <span className="text-xs text-white/30">
+//                           ${booking.price?.toLocaleString()} × {booking.days}{" "}
+//                           kun
+//                         </span>
+//                         <span className="text-2xl font-bold text-blue-400 tracking-tight">
+//                           ${booking.totalPrice?.toLocaleString()}
+//                         </span>
+//                       </div>
+
+//                       {/* Cancel button */}
+//                       <button
+//                         onClick={() => cancelBooking(booking.id, booking.carId)}
+//                         className="w-full py-3 rounded-xl text-sm font-semibold bg-red-500/10 border border-red-500/25 text-red-400 hover:bg-red-500/20 transition mt-auto"
+//                       >
+//                         ✕ Bekor qilish
+//                       </button>
+//                     </div>
+//                   </div>
+//                 ))}
+//               </div>
+//             )}
+//           </>
+//         )}
+//       </div>
+//     </div>
+//   );
+// };
+
+// export default Book;
+
 import {
   collection,
   addDoc,
@@ -933,28 +1379,48 @@ const Book = ({ search }: Props) => {
     if (currentUserId) getBookings(currentUserId);
   }
 
-  // ── Login bo'lmagan ──────────────────────────────────────────────
+  /* ─── Login yo'q ─── */
   if (!currentUserId) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-[#07070f] via-[#0d0d1f] to-[#07070f] flex items-center justify-center px-4">
-        <div className="bg-white/5 border border-white/10 rounded-3xl p-10 text-center max-w-sm w-full shadow-2xl">
-          <div className="text-6xl mb-5">🔒</div>
+      <div
+        className="min-h-screen flex items-center justify-center px-4"
+        style={{
+          background:
+            "linear-gradient(160deg,#07070f 0%,#0d0d1f 60%,#07070f 100%)",
+        }}
+      >
+        <div
+          className="w-full max-w-sm rounded-3xl p-10 text-center"
+          style={{
+            background: "rgba(255,255,255,0.04)",
+            border: "1px solid rgba(255,255,255,0.08)",
+          }}
+        >
+          <p className="text-6xl mb-5">🔒</p>
           <h2 className="text-white text-xl font-light mb-2">
             Ijaraga olish uchun kiring
           </h2>
-          <p className="text-white/40 text-sm mb-8">
+          <p
+            className="text-sm mb-8"
+            style={{ color: "rgba(255,255,255,0.35)" }}
+          >
             Hisobingizga kiring yoki yangi hisob yarating
           </p>
           <div className="flex flex-col sm:flex-row gap-3">
             <button
               onClick={() => navigate("/signin")}
-              className="flex-1 py-3 rounded-xl bg-gradient-to-r from-blue-500 to-indigo-500 text-white font-semibold text-sm hover:opacity-90 transition"
+              className="flex-1 py-3 rounded-xl text-white text-sm font-semibold transition-opacity hover:opacity-90"
+              style={{ background: "linear-gradient(135deg,#3b82f6,#6366f1)" }}
             >
               Kirish
             </button>
             <button
               onClick={() => navigate("/signup")}
-              className="flex-1 py-3 rounded-xl bg-white/10 border border-white/10 text-white font-semibold text-sm hover:bg-white/15 transition"
+              className="flex-1 py-3 rounded-xl text-white text-sm font-semibold transition-all hover:brightness-125"
+              style={{
+                background: "rgba(255,255,255,0.06)",
+                border: "1px solid rgba(255,255,255,0.1)",
+              }}
             >
               Ro'yxatdan o'tish
             </button>
@@ -969,288 +1435,478 @@ const Book = ({ search }: Props) => {
   );
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#07070f] via-[#0d0d1f] to-[#07070f] px-4 sm:px-6 py-10 text-white font-sans">
-      <div className="max-w-7xl mx-auto">
+    <div
+      className="min-h-screen px-4 sm:px-6 lg:px-10 py-12"
+      style={{
+        background:
+          "linear-gradient(160deg,#07070f 0%,#0d0d1f 60%,#07070f 100%)",
+        fontFamily: "'DM Sans','Segoe UI',sans-serif",
+        color: "#fff",
+      }}
+    >
+      <div className="max-w-[1300px] mx-auto">
         {/* ── Header + Tabs ── */}
         <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-5 mb-10">
           {/* Title */}
-          <div className="relative inline-block">
-            <h1 className="text-2xl sm:text-3xl font-light tracking-tight text-white">
+          <div className="relative inline-block mb-3">
+            <h1 className="text-3xl font-light tracking-tight">
               {tab === "cars" ? "Mashinalar" : "Mening buyurtmalarim"}
             </h1>
-            <p className="text-xs text-white/30 mt-1.5 tracking-wide">
+            <p
+              className="text-xs mt-1.5 tracking-wide"
+              style={{ color: "rgba(255,255,255,0.3)" }}
+            >
               {tab === "cars"
                 ? `${filteredCars.length} ta mavjud`
                 : `${bookings.length} ta buyurtma`}
             </p>
-            <span className="absolute -bottom-2 left-0 w-12 h-0.5 bg-gradient-to-r from-blue-500 to-indigo-500 rounded-full" />
+            <span
+              className="absolute -bottom-2 left-0 w-12 h-0.5 rounded-full"
+              style={{ background: "linear-gradient(90deg,#3b82f6,#6366f1)" }}
+            />
           </div>
 
           {/* Tab switcher */}
-          <div className="flex bg-white/5 border border-white/10 rounded-2xl p-1 w-full sm:w-auto">
-            <button
-              onClick={() => setTab("cars")}
-              className={`flex-1 sm:flex-none px-5 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 ${
-                tab === "cars"
-                  ? "bg-gradient-to-r from-blue-500 to-indigo-500 text-white shadow-lg"
-                  : "text-white/35 hover:text-white/60"
-              }`}
-            >
-              🚗 Mashinalar
-            </button>
-            <button
-              onClick={() => setTab("bookings")}
-              className={`flex-1 sm:flex-none px-5 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 flex items-center gap-2 justify-center ${
-                tab === "bookings"
-                  ? "bg-gradient-to-r from-blue-500 to-indigo-500 text-white shadow-lg"
-                  : "text-white/35 hover:text-white/60"
-              }`}
-            >
-              📋 Buyurtmalarim
-              {bookings.length > 0 && (
-                <span className="bg-white/20 text-white text-xs rounded-full px-2 py-0.5">
-                  {bookings.length}
-                </span>
-              )}
-            </button>
+          <div
+            className="flex rounded-2xl p-1 w-full sm:w-auto"
+            style={{
+              background: "rgba(255,255,255,0.04)",
+              border: "1px solid rgba(255,255,255,0.07)",
+            }}
+          >
+            {(["cars", "bookings"] as const).map((t) => (
+              <button
+                key={t}
+                onClick={() => setTab(t)}
+                className="flex-1 sm:flex-none px-5 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 flex items-center justify-center gap-2"
+                style={
+                  tab === t
+                    ? {
+                        background: "linear-gradient(135deg,#3b82f6,#6366f1)",
+                        color: "#fff",
+                      }
+                    : { color: "rgba(255,255,255,0.35)" }
+                }
+              >
+                {t === "cars" ? "🚗 Mashinalar" : "📋 Buyurtmalarim"}
+                {t === "bookings" && bookings.length > 0 && (
+                  <span
+                    className="text-xs rounded-full px-2 py-0.5"
+                    style={{ background: "rgba(255,255,255,0.2)" }}
+                  >
+                    {bookings.length}
+                  </span>
+                )}
+              </button>
+            ))}
           </div>
         </div>
 
         {/* ── MASHINALAR TAB ── */}
-        {tab === "cars" && (
-          <>
-            {filteredCars.length === 0 ? (
-              <div className="flex flex-col items-center justify-center pt-32 gap-3">
-                <span className="text-7xl grayscale opacity-20">🚗</span>
-                <h4 className="text-xl font-medium text-white/25">
-                  Mashina topilmadi
-                </h4>
-                <p className="text-sm text-white/15">
-                  Boshqa kalit so'z bilan urinib ko'ring
-                </p>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
-                {filteredCars.map((car) => {
-                  const carDays = days[car.id] ?? 1;
-                  const totalPrice = (car.price ?? 0) * carDays;
-                  const isBooked = booked[car.id];
-                  const isLoading = loading[car.id];
-
-                  return (
-                    <div
-                      key={car.id}
-                      className="group bg-white/[0.04] border border-white/[0.07] rounded-2xl overflow-hidden flex flex-col hover:-translate-y-1.5 hover:bg-white/[0.07] hover:border-blue-500/30 hover:shadow-2xl transition-all duration-300"
-                    >
-                      {/* Image */}
-                      <div className="relative aspect-video overflow-hidden">
-                        <img
-                          src={car.img}
-                          alt={car.name}
-                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                        />
-                        <div className="absolute inset-0 bg-gradient-to-t from-[#07070f]/80 to-transparent" />
-                        <span className="absolute top-3 left-3 bg-blue-500/80 backdrop-blur-md text-white text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-widest">
-                          {car.category}
-                        </span>
-                        {isBooked && (
-                          <span className="absolute top-3 right-3 bg-emerald-500/85 backdrop-blur-md text-white text-[10px] font-bold px-3 py-1 rounded-full">
-                            ✓ Buyurtma
-                          </span>
-                        )}
-                      </div>
-
-                      {/* Body */}
-                      <div className="p-5 flex flex-col flex-1 gap-3">
-                        <div>
-                          <h2 className="text-[15px] font-normal text-white/90 tracking-wide">
-                            {car.name}
-                          </h2>
-                          <p className="text-xs text-white/30 leading-relaxed mt-1 line-clamp-2">
-                            {car.desc}
-                          </p>
-                        </div>
-
-                        <hr className="border-white/[0.06]" />
-
-                        {/* Days picker */}
-                        <div className="bg-white/[0.04] border border-white/[0.07] rounded-xl p-3">
-                          <label className="text-[11px] text-white/35 block mb-2 tracking-wide">
-                            🗓 Necha kun?
-                          </label>
-                          <div className="flex items-center gap-2">
-                            <button
-                              onClick={() =>
-                                setDays((prev) => ({
-                                  ...prev,
-                                  [car.id]: Math.max(
-                                    1,
-                                    (prev[car.id] ?? 1) - 1,
-                                  ),
-                                }))
-                              }
-                              className="w-9 h-9 rounded-lg border border-white/10 bg-white/[0.06] text-white text-lg hover:bg-white/10 transition flex items-center justify-center shrink-0"
-                            >
-                              −
-                            </button>
-                            <input
-                              type="number"
-                              min={1}
-                              value={carDays}
-                              onChange={(e) =>
-                                setDays((prev) => ({
-                                  ...prev,
-                                  [car.id]: Math.max(1, Number(e.target.value)),
-                                }))
-                              }
-                              className="flex-1 text-center bg-white/[0.08] border border-white/10 rounded-lg py-1.5 text-white text-[15px] font-bold outline-none"
-                            />
-                            <button
-                              onClick={() =>
-                                setDays((prev) => ({
-                                  ...prev,
-                                  [car.id]: (prev[car.id] ?? 1) + 1,
-                                }))
-                              }
-                              className="w-9 h-9 rounded-lg border border-white/10 bg-white/[0.06] text-white text-lg hover:bg-white/10 transition flex items-center justify-center shrink-0"
-                            >
-                              +
-                            </button>
-                          </div>
-                        </div>
-
-                        {/* Price */}
-                        <div className="flex justify-between items-center py-1">
-                          <span className="text-xs text-white/30">
-                            ${car.price?.toLocaleString()} × {carDays} kun
-                          </span>
-                          <span className="text-2xl font-bold text-blue-400 tracking-tight">
-                            ${totalPrice.toLocaleString()}
-                          </span>
-                        </div>
-
-                        {/* Book button */}
-                        <button
-                          onClick={() => handleBook(car)}
-                          disabled={isLoading || isBooked}
-                          className={`w-full py-3 rounded-xl text-sm font-semibold tracking-wide transition-all mt-auto ${
-                            isBooked
-                              ? "bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 cursor-default"
-                              : isLoading
-                                ? "bg-white/5 text-white/30 cursor-not-allowed"
-                                : "bg-gradient-to-r from-blue-500 to-indigo-500 text-white hover:opacity-90 shadow-lg shadow-indigo-500/20"
-                          }`}
-                        >
-                          {isLoading
-                            ? "⏳ Yuklanmoqda..."
-                            : isBooked
-                              ? "✅ Buyurtma berildi!"
-                              : "Ijaraga olish →"}
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </>
-        )}
-
-        {/* ── BUYURTMALAR TAB ── */}
-        {tab === "bookings" && (
-          <>
-            {bookings.length === 0 ? (
-              <div className="flex flex-col items-center justify-center pt-32 gap-3">
-                <span className="text-7xl grayscale opacity-20">📋</span>
-                <h4 className="text-xl font-medium text-white/25">
-                  Buyurtma yo'q
-                </h4>
-                <p className="text-sm text-white/15">
-                  Hali hech qanday mashina ijaraga olinmagan
-                </p>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
-                {bookings.map((booking) => (
-                  <div
-                    key={booking.id}
-                    className="group bg-white/[0.04] border border-white/[0.07] rounded-2xl overflow-hidden flex flex-col hover:-translate-y-1.5 hover:bg-white/[0.07] hover:border-blue-500/30 hover:shadow-2xl transition-all duration-300"
-                  >
+        {tab === "cars" &&
+          (filteredCars.length === 0 ? (
+            <div className="flex flex-col items-center pt-32 gap-3">
+              <span
+                className="text-7xl"
+                style={{ filter: "grayscale(1) opacity(0.2)" }}
+              >
+                🚗
+              </span>
+              <h4
+                className="text-xl font-medium"
+                style={{ color: "rgba(255,255,255,0.25)" }}
+              >
+                Mashina topilmadi
+              </h4>
+              <p
+                className="text-sm"
+                style={{ color: "rgba(255,255,255,0.15)" }}
+              >
+                Boshqa kalit so'z bilan urinib ko'ring
+              </p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+              {filteredCars.map((car) => {
+                const carDays = days[car.id] ?? 1;
+                const totalPrice = (car.price ?? 0) * carDays;
+                const isBooked = booked[car.id];
+                const isLoading = loading[car.id];
+                return (
+                  <CarCard key={car.id}>
                     {/* Image */}
-                    <div className="relative aspect-video overflow-hidden">
+                    <div
+                      className="relative overflow-hidden"
+                      style={{ aspectRatio: "16/9" }}
+                    >
                       <img
-                        src={booking.img}
-                        alt={booking.name}
-                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                        src={car.img}
+                        alt={car.name}
+                        className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-[1.06]"
                       />
-                      <div className="absolute inset-0 bg-gradient-to-t from-[#07070f]/80 to-transparent" />
-                      <span className="absolute top-3 left-3 bg-blue-500/80 backdrop-blur-md text-white text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-widest">
-                        {booking.category}
+                      <div
+                        className="absolute inset-0"
+                        style={{
+                          background:
+                            "linear-gradient(to top,rgba(7,7,15,0.85) 0%,transparent 55%)",
+                        }}
+                      />
+                      <span
+                        className="absolute top-3 left-3 text-white text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-widest"
+                        style={{
+                          background: "rgba(59,130,246,0.8)",
+                          backdropFilter: "blur(10px)",
+                        }}
+                      >
+                        {car.category}
                       </span>
-                      <span className="absolute top-3 right-3 bg-emerald-500/85 backdrop-blur-md text-white text-[10px] font-bold px-3 py-1 rounded-full">
-                        ✓ Aktiv
-                      </span>
+                      {isBooked && (
+                        <span
+                          className="absolute top-3 right-3 text-white text-[10px] font-bold px-3 py-1 rounded-full"
+                          style={{
+                            background: "rgba(16,185,129,0.85)",
+                            backdropFilter: "blur(10px)",
+                          }}
+                        >
+                          ✓ Buyurtma
+                        </span>
+                      )}
                     </div>
 
                     {/* Body */}
                     <div className="p-5 flex flex-col flex-1 gap-3">
                       <div>
-                        <h2 className="text-[15px] font-normal text-white/90 tracking-wide">
-                          {booking.name}
+                        <h2
+                          className="text-[15px] font-normal tracking-wide"
+                          style={{ color: "#f0f0ff" }}
+                        >
+                          {car.name}
                         </h2>
-                        <p className="text-xs text-white/30 leading-relaxed mt-1 line-clamp-2">
-                          {booking.desc}
+                        <p
+                          className="text-xs leading-relaxed mt-1 line-clamp-2"
+                          style={{ color: "rgba(255,255,255,0.3)" }}
+                        >
+                          {car.desc}
                         </p>
                       </div>
 
-                      <hr className="border-white/[0.06]" />
+                      <div
+                        className="h-px"
+                        style={{ background: "rgba(255,255,255,0.06)" }}
+                      />
 
-                      {/* Info */}
-                      <div className="bg-white/[0.04] border border-white/[0.07] rounded-xl p-3 flex flex-col gap-2">
-                        <div className="flex justify-between items-center">
-                          <span className="text-xs text-white/35">
-                            🗓 Muddat
-                          </span>
-                          <span className="text-sm text-white font-medium">
-                            {booking.days} kun
-                          </span>
-                        </div>
-                        <div className="flex justify-between items-center">
-                          <span className="text-xs text-white/35">🕒 Sana</span>
-                          <span className="text-xs text-white/70">
-                            {new Date(booking.bookedAt).toLocaleDateString()}
-                          </span>
+                      {/* Days picker */}
+                      <div
+                        className="rounded-xl p-3"
+                        style={{
+                          background: "rgba(255,255,255,0.04)",
+                          border: "1px solid rgba(255,255,255,0.07)",
+                        }}
+                      >
+                        <label
+                          className="text-[11px] block mb-2 tracking-wide"
+                          style={{ color: "rgba(255,255,255,0.35)" }}
+                        >
+                          🗓 Necha kun?
+                        </label>
+                        <div className="flex items-center gap-2">
+                          <PickerBtn
+                            onClick={() =>
+                              setDays((p) => ({
+                                ...p,
+                                [car.id]: Math.max(1, (p[car.id] ?? 1) - 1),
+                              }))
+                            }
+                          >
+                            −
+                          </PickerBtn>
+                          <input
+                            type="number"
+                            min={1}
+                            value={carDays}
+                            onChange={(e) =>
+                              setDays((p) => ({
+                                ...p,
+                                [car.id]: Math.max(1, Number(e.target.value)),
+                              }))
+                            }
+                            className="flex-1 text-center rounded-lg py-1.5 text-white text-[15px] font-bold outline-none"
+                            style={{
+                              background: "rgba(255,255,255,0.08)",
+                              border: "1px solid rgba(255,255,255,0.1)",
+                            }}
+                          />
+                          <PickerBtn
+                            onClick={() =>
+                              setDays((p) => ({
+                                ...p,
+                                [car.id]: (p[car.id] ?? 1) + 1,
+                              }))
+                            }
+                          >
+                            +
+                          </PickerBtn>
                         </div>
                       </div>
 
                       {/* Price */}
                       <div className="flex justify-between items-center py-1">
-                        <span className="text-xs text-white/30">
-                          ${booking.price?.toLocaleString()} × {booking.days}{" "}
-                          kun
+                        <span
+                          className="text-xs"
+                          style={{ color: "rgba(255,255,255,0.3)" }}
+                        >
+                          ${car.price?.toLocaleString()} × {carDays} kun
                         </span>
-                        <span className="text-2xl font-bold text-blue-400 tracking-tight">
-                          ${booking.totalPrice?.toLocaleString()}
+                        <span
+                          className="text-2xl font-bold tracking-tight"
+                          style={{ color: "#60a5fa" }}
+                        >
+                          ${totalPrice.toLocaleString()}
                         </span>
                       </div>
 
-                      {/* Cancel button */}
+                      {/* Book button */}
                       <button
-                        onClick={() => cancelBooking(booking.id, booking.carId)}
-                        className="w-full py-3 rounded-xl text-sm font-semibold bg-red-500/10 border border-red-500/25 text-red-400 hover:bg-red-500/20 transition mt-auto"
+                        onClick={() => handleBook(car)}
+                        disabled={isLoading || isBooked}
+                        className="w-full py-3 rounded-xl text-sm font-semibold tracking-wide transition-all mt-auto"
+                        style={
+                          isBooked
+                            ? {
+                                background: "rgba(16,185,129,0.15)",
+                                border: "1px solid rgba(16,185,129,0.3)",
+                                color: "#34d399",
+                                cursor: "default",
+                              }
+                            : isLoading
+                              ? {
+                                  background: "rgba(255,255,255,0.05)",
+                                  color: "rgba(255,255,255,0.4)",
+                                  cursor: "not-allowed",
+                                }
+                              : {
+                                  background:
+                                    "linear-gradient(135deg,#3b82f6,#6366f1)",
+                                  color: "#fff",
+                                  boxShadow: "0 4px 20px rgba(99,102,241,0.3)",
+                                }
+                        }
                       >
-                        ✕ Bekor qilish
+                        {isLoading
+                          ? "⏳ Yuklanmoqda..."
+                          : isBooked
+                            ? "✅ Buyurtma berildi!"
+                            : "Ijaraga olish →"}
                       </button>
                     </div>
+                  </CarCard>
+                );
+              })}
+            </div>
+          ))}
+
+        {/* ── BUYURTMALAR TAB ── */}
+        {tab === "bookings" &&
+          (bookings.length === 0 ? (
+            <div className="flex flex-col items-center pt-32 gap-3">
+              <span
+                className="text-7xl"
+                style={{ filter: "grayscale(1) opacity(0.2)" }}
+              >
+                📋
+              </span>
+              <h4
+                className="text-xl font-medium"
+                style={{ color: "rgba(255,255,255,0.25)" }}
+              >
+                Buyurtma yo'q
+              </h4>
+              <p
+                className="text-sm"
+                style={{ color: "rgba(255,255,255,0.15)" }}
+              >
+                Hali hech qanday mashina ijaraga olinmagan
+              </p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+              {bookings.map((booking) => (
+                <CarCard key={booking.id}>
+                  {/* Image */}
+                  <div
+                    className="relative overflow-hidden"
+                    style={{ aspectRatio: "16/9" }}
+                  >
+                    <img
+                      src={booking.img}
+                      alt={booking.name}
+                      className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-[1.06]"
+                    />
+                    <div
+                      className="absolute inset-0"
+                      style={{
+                        background:
+                          "linear-gradient(to top,rgba(7,7,15,0.85) 0%,transparent 55%)",
+                      }}
+                    />
+                    <span
+                      className="absolute top-3 left-3 text-white text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-widest"
+                      style={{
+                        background: "rgba(59,130,246,0.8)",
+                        backdropFilter: "blur(10px)",
+                      }}
+                    >
+                      {booking.category}
+                    </span>
+                    <span
+                      className="absolute top-3 right-3 text-white text-[10px] font-bold px-3 py-1 rounded-full"
+                      style={{
+                        background: "rgba(16,185,129,0.85)",
+                        backdropFilter: "blur(10px)",
+                      }}
+                    >
+                      ✓ Aktiv
+                    </span>
                   </div>
-                ))}
-              </div>
-            )}
-          </>
-        )}
+
+                  {/* Body */}
+                  <div className="p-5 flex flex-col flex-1 gap-3">
+                    <div>
+                      <h2
+                        className="text-[15px] font-normal tracking-wide"
+                        style={{ color: "#f0f0ff" }}
+                      >
+                        {booking.name}
+                      </h2>
+                      <p
+                        className="text-xs leading-relaxed mt-1 line-clamp-2"
+                        style={{ color: "rgba(255,255,255,0.3)" }}
+                      >
+                        {booking.desc}
+                      </p>
+                    </div>
+
+                    <div
+                      className="h-px"
+                      style={{ background: "rgba(255,255,255,0.06)" }}
+                    />
+
+                    {/* Info box */}
+                    <div
+                      className="rounded-xl p-3 flex flex-col gap-2"
+                      style={{
+                        background: "rgba(255,255,255,0.04)",
+                        border: "1px solid rgba(255,255,255,0.07)",
+                      }}
+                    >
+                      <div className="flex justify-between items-center">
+                        <span
+                          className="text-xs"
+                          style={{ color: "rgba(255,255,255,0.35)" }}
+                        >
+                          🗓 Muddat
+                        </span>
+                        <span className="text-sm font-medium text-white">
+                          {booking.days} kun
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span
+                          className="text-xs"
+                          style={{ color: "rgba(255,255,255,0.35)" }}
+                        >
+                          🕒 Sana
+                        </span>
+                        <span
+                          className="text-xs"
+                          style={{ color: "rgba(255,255,255,0.7)" }}
+                        >
+                          {new Date(booking.bookedAt).toLocaleDateString()}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Price */}
+                    <div className="flex justify-between items-center py-1">
+                      <span
+                        className="text-xs"
+                        style={{ color: "rgba(255,255,255,0.3)" }}
+                      >
+                        ${booking.price?.toLocaleString()} × {booking.days} kun
+                      </span>
+                      <span
+                        className="text-2xl font-bold tracking-tight"
+                        style={{ color: "#60a5fa" }}
+                      >
+                        ${booking.totalPrice?.toLocaleString()}
+                      </span>
+                    </div>
+
+                    {/* Cancel button */}
+                    <button
+                      onClick={() => cancelBooking(booking.id, booking.carId)}
+                      className="w-full py-3 rounded-xl text-sm font-semibold transition-all mt-auto hover:brightness-125"
+                      style={{
+                        background: "rgba(239,68,68,0.1)",
+                        border: "1px solid rgba(239,68,68,0.25)",
+                        color: "#f87171",
+                      }}
+                    >
+                      ✕ Bekor qilish
+                    </button>
+                  </div>
+                </CarCard>
+              ))}
+            </div>
+          ))}
       </div>
     </div>
   );
 };
+
+/* ─── Reusable micro-components ─── */
+const CarCard = ({ children }: { children: React.ReactNode }) => (
+  <div
+    className="group flex flex-col rounded-[22px] overflow-hidden transition-all duration-300 hover:-translate-y-1.5"
+    style={{
+      background: "rgba(255,255,255,0.04)",
+      border: "1px solid rgba(255,255,255,0.07)",
+    }}
+    onMouseEnter={(e) => {
+      const el = e.currentTarget as HTMLDivElement;
+      el.style.background = "rgba(255,255,255,0.07)";
+      el.style.border = "1px solid rgba(99,130,246,0.3)";
+      el.style.boxShadow =
+        "0 24px 64px rgba(0,0,0,0.5),0 0 40px rgba(59,130,246,0.08)";
+    }}
+    onMouseLeave={(e) => {
+      const el = e.currentTarget as HTMLDivElement;
+      el.style.background = "rgba(255,255,255,0.04)";
+      el.style.border = "1px solid rgba(255,255,255,0.07)";
+      el.style.boxShadow = "none";
+    }}
+  >
+    {children}
+  </div>
+);
+
+const PickerBtn = ({
+  children,
+  onClick,
+}: {
+  children: React.ReactNode;
+  onClick: () => void;
+}) => (
+  <button
+    onClick={onClick}
+    className="w-9 h-9 rounded-lg text-white text-lg flex items-center justify-center shrink-0 transition-all hover:brightness-125"
+    style={{
+      border: "1px solid rgba(255,255,255,0.1)",
+      background: "rgba(255,255,255,0.06)",
+    }}
+  >
+    {children}
+  </button>
+);
 
 export default Book;
