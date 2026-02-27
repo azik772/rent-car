@@ -10,12 +10,8 @@ import {
 import { db, auth } from "../firebase.config";
 import { useEffect, useState } from "react";
 import { onAuthStateChanged } from "firebase/auth";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import type { Car } from "../utils/Home";
-
-interface Props {
-  search: string;
-}
 
 interface Booking {
   id: string;
@@ -29,57 +25,71 @@ interface Booking {
   days: number;
   totalPrice: number;
   bookedAt: string;
+  customerName: string;
+  customerEmail: string;
+  customerPhone: string;
 }
 
-const Book = ({ search }: Props) => {
-  const [cars, setCars] = useState<(Car & { id: string })[]>([]);
-  const [bookings, setBookings] = useState<Booking[]>([]);
-  const [days, setDays] = useState<{ [id: string]: number }>({});
-  const [loading, setLoading] = useState<{ [id: string]: boolean }>({});
-  const [booked, setBooked] = useState<{ [id: string]: boolean }>({});
-  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
-  const [, setIsAdmin] = useState(false);
-  const [tab, setTab] = useState<"cars" | "bookings">("cars");
+interface BookingForm {
+  customerName: string;
+  customerEmail: string;
+  customerPhone: string;
+  days: number;
+}
+
+interface Props {
+  search?: string;
+}
+
+const Book = ({}: Props) => {
+  const location = useLocation();
   const navigate = useNavigate();
+
+  const selectedCar =
+    (location.state as { car?: Car & { id: string } })?.car ?? null;
+
+  const [bookings, setBookings] = useState<Booking[]>([]);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+
+  // ✅ Tab boshlang'ich qiymati: car kelgan bo'lsa "car", aks holda "bookings"
+  const [tab, setTab] = useState<"car" | "bookings">(
+    selectedCar ? "car" : "bookings",
+  );
+
+  const [modalOpen, setModalOpen] = useState(false);
+  const [form, setForm] = useState<BookingForm>({
+    customerName: "",
+    customerEmail: "",
+    customerPhone: "",
+    days: 1,
+  });
+  const [submitting, setSubmitting] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
+  const [formErrors, setFormErrors] = useState<Partial<Record<string, string>>>(
+    {},
+  );
 
   useEffect(() => {
     const localUser = localStorage.getItem("user");
     if (localUser) {
       const userData = JSON.parse(localUser);
       if (userData.email === "azizbeknarzullayevo1o@gmail.com") {
-        setIsAdmin(true);
         setCurrentUserId("admin");
-        getCars();
         getBookings("admin");
         return;
       }
     }
-
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       if (user) {
         setCurrentUserId(user.uid);
-        getCars();
         getBookings(user.uid);
       } else {
         setCurrentUserId(null);
         setBookings([]);
       }
     });
-
     return () => unsubscribe();
   }, []);
-
-  async function getCars() {
-    const snapshot = await getDocs(collection(db, "cars"));
-    const arr = snapshot.docs.map((d) => ({
-      ...(d.data() as Car),
-      id: d.id,
-    }));
-    setCars(arr);
-    const initialDays: { [id: string]: number } = {};
-    arr.forEach((car) => (initialDays[car.id] = 1));
-    setDays(initialDays);
-  }
 
   async function getBookings(userId: string) {
     const q = query(collection(db, "bookings"), where("userId", "==", userId));
@@ -89,67 +99,72 @@ const Book = ({ search }: Props) => {
       ...d.data(),
     })) as Booking[];
     setBookings(items);
-
-    // Band qilingan mashinalarni belgilash
-    const bookedMap: { [id: string]: boolean } = {};
-    items.forEach((b) => (bookedMap[b.carId] = true));
-    setBooked(bookedMap);
   }
 
-  async function handleBook(car: Car & { id: string }) {
-    if (!currentUserId) return;
-    const carDays = days[car.id] ?? 1;
-    const totalPrice = (car.price ?? 0) * carDays;
+  function validateForm(): boolean {
+    const errors: Partial<Record<string, string>> = {};
+    if (!form.customerName.trim()) errors.customerName = "Ism kiritilmadi";
+    if (!form.customerEmail.trim()) errors.customerEmail = "Email kiritilmadi";
+    else if (!/\S+@\S+\.\S+/.test(form.customerEmail))
+      errors.customerEmail = "Email noto'g'ri";
+    if (!form.customerPhone.trim())
+      errors.customerPhone = "Telefon kiritilmadi";
+    if (!form.days || form.days < 1) errors.days = "Kun 1 dan kam bo'lmasin";
+    setFormErrors(errors);
+    return Object.keys(errors).length === 0;
+  }
 
-    setLoading((prev) => ({ ...prev, [car.id]: true }));
+  async function handleSubmitBooking() {
+    if (!currentUserId || !selectedCar) return;
+    if (!validateForm()) return;
+    const totalPrice = (selectedCar.price ?? 0) * form.days;
+    setSubmitting(true);
     try {
       await addDoc(collection(db, "bookings"), {
-        carId: car.id,
+        carId: selectedCar.id,
         userId: currentUserId,
-        name: car.name,
-        price: car.price,
-        img: car.img,
-        category: car.category,
-        desc: car.desc,
-        days: carDays,
+        name: selectedCar.name,
+        price: selectedCar.price,
+        img: selectedCar.img,
+        category: selectedCar.category,
+        desc: selectedCar.desc,
+        days: form.days,
         totalPrice,
         bookedAt: new Date().toISOString(),
+        customerName: form.customerName,
+        customerEmail: form.customerEmail,
+        customerPhone: form.customerPhone,
       });
+      setSubmitted(true);
       getBookings(currentUserId);
+      setTimeout(() => {
+        setModalOpen(false);
+        setSubmitted(false);
+        setForm({
+          customerName: "",
+          customerEmail: "",
+          customerPhone: "",
+          days: 1,
+        });
+      }, 2000);
     } catch (e) {
       console.error(e);
     } finally {
-      setLoading((prev) => ({ ...prev, [car.id]: false }));
+      setSubmitting(false);
     }
   }
 
-  async function cancelBooking(bookingId: string, carId: string) {
+  async function cancelBooking(bookingId: string) {
     await deleteDoc(doc(db, "bookings", bookingId));
-    setBooked((prev) => ({ ...prev, [carId]: false }));
     if (currentUserId) getBookings(currentUserId);
   }
 
-  // Login bo'lmagan foydalanuvchi
+  // ---------- Login bo'lmagan ----------
   if (!currentUserId) {
     return (
       <div style={S.page}>
-        <div
-          style={{
-            minHeight: "100vh",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-          }}
-        >
-          <div
-            style={{
-              textAlign: "center",
-              background: "rgba(255,255,255,0.04)",
-              border: "1px solid rgba(255,255,255,0.08)",
-              borderRadius: 24,
-              padding: "48px 40px",
-            }}
-          >
+        <div style={S.centered}>
+          <div style={S.loginBox}>
             <p style={{ fontSize: 48, marginBottom: 16 }}>🔒</p>
             <h2
               style={{
@@ -170,373 +185,450 @@ const Book = ({ search }: Props) => {
             >
               Hisobingizga kiring yoki yangi hisob yarating
             </p>
-            <div>
-              <button
-                onClick={() => navigate("/signup")}
-                style={{
-                  ...S.btn,
-                  background: "rgba(255,255,255,0.06)",
-                  border: "1px solid rgba(255,255,255,0.1)",
-                  color: "#fff",
-                  width: "auto",
-                  padding: "12px 28px",
-                }}
-              >
-                Ro'yxatdan o'tish
-              </button>
-            </div>
+            <button onClick={() => navigate("/signup")} style={S.signupBtn}>
+              Ro'yxatdan o'tish
+            </button>
           </div>
         </div>
       </div>
     );
   }
 
-  const filteredCars = cars.filter((car) =>
-    car.name?.toLowerCase().includes(search.toLowerCase()),
-  );
+  // ✅ selectedCar null bo'lsa ham crash bermaydi
+  const isAlreadyBooked = selectedCar
+    ? bookings.some((b) => b.carId === selectedCar.id)
+    : false;
+  const totalPrice = selectedCar ? (selectedCar.price ?? 0) * form.days : 0;
 
   return (
     <div style={S.page}>
-      <div style={S.container}>
-        {/* Header + Tab */}
+      {/* ===== MODAL ===== */}
+      {modalOpen && selectedCar && (
         <div
-          style={{
-            display: "flex",
-            flexWrap: "wrap",
-            alignItems: "flex-end",
-            justifyContent: "space-between",
-            marginBottom: 40,
-          }}
+          style={S.overlay}
+          onClick={() => !submitting && setModalOpen(false)}
         >
-          <div style={S.header}>
-            <h1 style={S.title}>
-              {tab === "cars" ? "Mashinalar" : "Mening buyurtmalarim"}
+          <div style={S.modal} onClick={(e) => e.stopPropagation()}>
+            {submitted ? (
+              <div style={S.successBox}>
+                <div style={S.successIcon}>✅</div>
+                <h3
+                  style={{
+                    color: "#34d399",
+                    fontSize: 18,
+                    margin: "12px 0 6px",
+                  }}
+                >
+                  Buyurtma qabul qilindi!
+                </h3>
+                <p style={{ color: "rgba(255,255,255,0.4)", fontSize: 13 }}>
+                  Tez orada siz bilan bog'lanamiz
+                </p>
+              </div>
+            ) : (
+              <>
+                <div style={S.modalHeader}>
+                  <div>
+                    <h2 style={S.modalTitle}>Buyurtma rasmiylashtirish</h2>
+                    <p style={S.modalSub}>{selectedCar.name}</p>
+                  </div>
+                  <button
+                    onClick={() => setModalOpen(false)}
+                    style={S.closeBtn}
+                  >
+                    ✕
+                  </button>
+                </div>
+
+                <div style={S.miniPreview}>
+                  <img
+                    src={selectedCar.img}
+                    alt={selectedCar.name}
+                    style={S.miniImg}
+                  />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <p
+                      style={{
+                        color: "#fff",
+                        fontSize: 14,
+                        fontWeight: 600,
+                        margin: 0,
+                      }}
+                    >
+                      {selectedCar.name}
+                    </p>
+                    <p
+                      style={{
+                        color: "rgba(255,255,255,0.35)",
+                        fontSize: 12,
+                        margin: "4px 0 0",
+                      }}
+                    >
+                      ${selectedCar.price?.toLocaleString()} / kun
+                    </p>
+                  </div>
+                  <div style={S.miniTotal}>
+                    <span
+                      style={{ fontSize: 11, color: "rgba(255,255,255,0.3)" }}
+                    >
+                      JAMI
+                    </span>
+                    <span
+                      style={{
+                        fontSize: 22,
+                        fontWeight: 700,
+                        color: "#60a5fa",
+                      }}
+                    >
+                      ${totalPrice.toLocaleString()}
+                    </span>
+                  </div>
+                </div>
+
+                <div style={S.formGrid}>
+                  <Field
+                    icon="👤"
+                    label="Ism Sharif"
+                    value={form.customerName}
+                    placeholder="Ism Sharif..."
+                    error={formErrors.customerName}
+                    onChange={(v) =>
+                      setForm((p) => ({ ...p, customerName: v }))
+                    }
+                  />
+                  <Field
+                    icon="📧"
+                    label="Email"
+                    value={form.customerEmail}
+                    type="email"
+                    placeholder="email@gmail.com"
+                    error={formErrors.customerEmail}
+                    onChange={(v) =>
+                      setForm((p) => ({ ...p, customerEmail: v }))
+                    }
+                  />
+                  <Field
+                    icon="📞"
+                    label="Telefon raqam"
+                    value={form.customerPhone}
+                    type="tel"
+                    placeholder="+998 90 123 45 67"
+                    error={formErrors.customerPhone}
+                    onChange={(v) =>
+                      setForm((p) => ({ ...p, customerPhone: v }))
+                    }
+                  />
+
+                  <div style={S.fieldWrap}>
+                    <label style={S.fieldLabel}>
+                      <span style={S.fieldIcon}>🗓</span> Necha kun?
+                    </label>
+                    <div style={S.pickerRow}>
+                      <button
+                        style={S.pickerBtn}
+                        onClick={() =>
+                          setForm((p) => ({
+                            ...p,
+                            days: Math.max(1, p.days - 1),
+                          }))
+                        }
+                      >
+                        −
+                      </button>
+                      <input
+                        type="number"
+                        min={1}
+                        value={form.days}
+                        onChange={(e) =>
+                          setForm((p) => ({
+                            ...p,
+                            days: Math.max(1, Number(e.target.value)),
+                          }))
+                        }
+                        style={S.pickerInput}
+                      />
+                      <button
+                        style={S.pickerBtn}
+                        onClick={() =>
+                          setForm((p) => ({ ...p, days: p.days + 1 }))
+                        }
+                      >
+                        +
+                      </button>
+                    </div>
+                    {formErrors.days && (
+                      <p style={S.errorText}>{formErrors.days}</p>
+                    )}
+                  </div>
+                </div>
+
+                <div style={S.priceSummary}>
+                  <span
+                    style={{ color: "rgba(255,255,255,0.4)", fontSize: 13 }}
+                  >
+                    ${selectedCar.price?.toLocaleString()} × {form.days} kun
+                  </span>
+                  <span
+                    style={{ color: "#60a5fa", fontSize: 22, fontWeight: 700 }}
+                  >
+                    ${totalPrice.toLocaleString()}
+                  </span>
+                </div>
+
+                <button
+                  onClick={handleSubmitBooking}
+                  disabled={submitting}
+                  style={{
+                    ...S.submitBtn,
+                    opacity: submitting ? 0.6 : 1,
+                    cursor: submitting ? "not-allowed" : "pointer",
+                  }}
+                >
+                  {submitting
+                    ? "⏳ Yuborilmoqda..."
+                    : "✅ Buyurtmani tasdiqlash"}
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ===== MAIN CONTENT ===== */}
+      <div style={S.container}>
+        <button onClick={() => navigate(-1)} style={S.backBtn}>
+          ← Orqaga
+        </button>
+
+        <div style={S.tabRow}>
+          <div>
+            {/* ✅ selectedCar null bo'lsa crash bermaydi */}
+            <h1 style={S.pageTitle}>
+              {tab === "car" && selectedCar
+                ? selectedCar.name
+                : "Mening buyurtmalarim"}
             </h1>
-            <p style={S.subtitle}>
-              {tab === "cars"
-                ? `${filteredCars.length} ta mavjud`
-                : `${bookings.length} ta buyurtma`}
-            </p>
             <div style={S.titleAccent} />
           </div>
-
-          {/* Tab buttons */}
-          <div
-            style={{
-              display: "flex",
-              gap: 8,
-              background: "rgba(255,255,255,0.04)",
-              border: "1px solid rgba(255,255,255,0.07)",
-              borderRadius: 14,
-              padding: 4,
-              
-            }}
-          >
-            <button
-              onClick={() => setTab("cars")}
-              style={{
-                padding: "4px 15px",
-                borderRadius: 10,
-                border: "none",
-                cursor: "pointer",
-                fontSize: 13,
-                fontWeight: 600,
-                transition: "all 0.2s",
-                background:
-                  tab === "cars"
-                    ? "linear-gradient(135deg, #3b82f6, #6366f1)"
-                    : "transparent",
-                color: tab === "cars" ? "#fff" : "rgba(255,255,255,0.35)",
-              }}
-            >
-              🚗 Mashinalar
-            </button>
+          <div style={S.tabGroup}>
+            {/* ✅ Mashina tab faqat selectedCar bor bo'lsa ko'rinadi */}
+            {selectedCar && (
+              <button
+                onClick={() => setTab("car")}
+                style={{
+                  ...S.tabBtn,
+                  ...(tab === "car" ? S.tabActive : S.tabInactive),
+                }}
+              >
+                🚗 Mashina
+              </button>
+            )}
             <button
               onClick={() => setTab("bookings")}
               style={{
-                padding: "5px 15px",
-                borderRadius: 10,
-                border: "none",
-                cursor: "pointer",
-              
-                fontSize: 13,
-                fontWeight: 600,
-                transition: "all 0.2s",
-                background:
-                  tab === "bookings"
-                    ? "linear-gradient(135deg, #3b82f6, #6366f1)"
-                    : "transparent",
-                color: tab === "bookings" ? "#fff" : "rgba(255,255,255,0.35)",
+                ...S.tabBtn,
+                ...(tab === "bookings" ? S.tabActive : S.tabInactive),
               }}
             >
               📋 Buyurtmalarim{" "}
               {bookings.length > 0 && (
-                <span
-                  style={{
-                    background: "rgba(255,255,255,0.2)",
-                    borderRadius: 50,
-                    padding: "1px 7px",
-                    fontSize: 11,
-                  }}
-                >
-                  {bookings.length}
-                </span>
+                <span style={S.tabBadge}>{bookings.length}</span>
               )}
             </button>
           </div>
         </div>
 
-        {/* === MASHINALAR TAB === */}
-        {tab === "cars" && (
-          <>
-            {filteredCars.length === 0 ? (
-              <div style={S.empty}>
-                <span style={S.emptyIcon}>🚗</span>
-                <h4 style={S.emptyTitle}>Mashina topilmadi</h4>
-                <p style={S.emptyText}>
-                  Boshqa kalit so'z bilan urinib ko'ring
-                </p>
-              </div>
-            ) : (
-              <div style={S.grid}>
-                {filteredCars.map((car) => {
-                  const carDays = days[car.id] ?? 1;
-                  const totalPrice = (car.price ?? 0) * carDays;
-                  const isBooked = booked[car.id];
-                  const isLoading = loading[car.id];
+        {/* ===== CAR TAB ===== */}
+        {/* ✅ selectedCar null bo'lsa bu blok render bo'lmaydi */}
+        {tab === "car" && selectedCar && (
+          <div style={S.carLayout}>
+            <div style={S.carImgWrap}>
+              <img
+                src={selectedCar.img}
+                alt={selectedCar.name}
+                style={S.carImg}
+              />
+              <div style={S.carImgGradient} />
+              <span style={S.catBadge}>{selectedCar.category}</span>
+              {isAlreadyBooked && (
+                <span style={S.bookedBadge}>✓ Buyurtma berilgan</span>
+              )}
+            </div>
 
-                  return (
-                    <div
-                      key={car.id}
-                      style={S.card}
-                      onMouseEnter={(e) =>
-                        Object.assign(
-                          (e.currentTarget as HTMLDivElement).style,
-                          S.cardHoverStyle,
-                        )
-                      }
-                      onMouseLeave={(e) =>
-                        Object.assign(
-                          (e.currentTarget as HTMLDivElement).style,
-                          S.cardBaseStyle,
-                        )
-                      }
+            <div style={S.infoPanel}>
+              <div style={S.infoPanelInner}>
+                <h2 style={S.carTitle}>{selectedCar.name}</h2>
+                <p style={S.carDesc}>{selectedCar.desc}</p>
+                <div style={S.divider} />
+                <div style={S.priceDisplay}>
+                  <div>
+                    <p
+                      style={{
+                        color: "rgba(255,255,255,0.35)",
+                        fontSize: 12,
+                        margin: 0,
+                      }}
                     >
-                      <div style={S.imgBox}>
-                        <img
-                          src={car.img}
-                          alt={car.name}
-                          style={S.img}
-                          onMouseEnter={(e) =>
-                            (e.currentTarget.style.transform = "scale(1.07)")
-                          }
-                          onMouseLeave={(e) =>
-                            (e.currentTarget.style.transform = "scale(1)")
-                          }
-                        />
-                        <div style={S.imgGradient} />
-                        <span style={S.badge}>{car.category}</span>
-                        {isBooked && (
-                          <span style={S.bookedBadge}>✓ Buyurtma</span>
-                        )}
-                      </div>
+                      Kunlik narx
+                    </p>
+                    <p style={S.priceValue}>
+                      ${selectedCar.price?.toLocaleString()}
+                      <span
+                        style={{
+                          fontSize: 14,
+                          color: "rgba(255,255,255,0.3)",
+                          fontWeight: 400,
+                        }}
+                      >
+                        {" "}
+                        /kun
+                      </span>
+                    </p>
+                  </div>
+                </div>
 
-                      <div style={S.body}>
-                        <h2 style={S.carName}>{car.name}</h2>
-                        <p style={S.carDesc}>{car.desc}</p>
-                        <div style={S.divider} />
+                {isAlreadyBooked ? (
+                  <div style={S.alreadyBookedBox}>
+                    <span>✅ Bu mashina allaqachon buyurtma qilingan</span>
+                    <button
+                      onClick={() => setTab("bookings")}
+                      style={S.viewBookingBtn}
+                    >
+                      Buyurtmani ko'rish →
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => setModalOpen(true)}
+                    style={S.bookBtn}
+                    onMouseEnter={(e) =>
+                      (e.currentTarget.style.transform = "translateY(-2px)")
+                    }
+                    onMouseLeave={(e) =>
+                      (e.currentTarget.style.transform = "translateY(0)")
+                    }
+                  >
+                    📋 Buyurtma berish
+                  </button>
+                )}
 
-                        <div style={S.pickerBox}>
-                          <label style={S.pickerLabel}>🗓 Necha kun?</label>
-                          <div style={S.pickerRow}>
-                            <button
-                              style={S.pickerBtn}
-                              onClick={() =>
-                                setDays((prev) => ({
-                                  ...prev,
-                                  [car.id]: Math.max(
-                                    1,
-                                    (prev[car.id] ?? 1) - 1,
-                                  ),
-                                }))
-                              }
-                            >
-                              −
-                            </button>
-                            <input
-                              type="number"
-                              min={1}
-                              value={carDays}
-                              onChange={(e) =>
-                                setDays((prev) => ({
-                                  ...prev,
-                                  [car.id]: Math.max(1, Number(e.target.value)),
-                                }))
-                              }
-                              style={S.pickerInput}
-                            />
-                            <button
-                              style={S.pickerBtn}
-                              onClick={() =>
-                                setDays((prev) => ({
-                                  ...prev,
-                                  [car.id]: (prev[car.id] ?? 1) + 1,
-                                }))
-                              }
-                            >
-                              +
-                            </button>
-                          </div>
-                        </div>
-
-                        <div style={S.priceRow}>
-                          <span style={S.priceSmall}>
-                            ${car.price?.toLocaleString()} × {carDays} kun
-                          </span>
-                          <span style={S.priceBig}>
-                            ${totalPrice.toLocaleString()}
-                          </span>
-                        </div>
-
-                        <button
-                          onClick={() => handleBook(car)}
-                          disabled={isLoading || isBooked}
-                          style={{
-                            ...S.btn,
-                            ...(isBooked
-                              ? S.btnBooked
-                              : isLoading
-                                ? S.btnLoading
-                                : S.btnNormal),
-                          }}
-                        >
-                          {isLoading
-                            ? "⏳ Yuklanmoqda..."
-                            : isBooked
-                              ? "✅ Buyurtma berildi!"
-                              : "Ijaraga olish →"}
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })}
+                <div style={S.infoCards}>
+                  <div style={S.infoCard}>
+                    <span style={S.infoCardIcon}>📦</span>
+                    <span style={S.infoCardLabel}>Kategoriya</span>
+                    <span style={S.infoCardValue}>{selectedCar.category}</span>
+                  </div>
+                  <div style={S.infoCard}>
+                    <span style={S.infoCardIcon}>✅</span>
+                    <span style={S.infoCardLabel}>Holat</span>
+                    <span style={{ ...S.infoCardValue, color: "#34d399" }}>
+                      Mavjud
+                    </span>
+                  </div>
+                </div>
               </div>
-            )}
-          </>
+            </div>
+          </div>
         )}
 
-        {/* === BUYURTMALAR TAB === */}
+        {/* ===== BOOKINGS TAB ===== */}
         {tab === "bookings" && (
           <>
             {bookings.length === 0 ? (
               <div style={S.empty}>
-                <span style={S.emptyIcon}>📋</span>
-                <h4 style={S.emptyTitle}>Buyurtma yo'q</h4>
-                <p style={S.emptyText}>
+                <span
+                  style={{ fontSize: 72, filter: "grayscale(1) opacity(0.2)" }}
+                >
+                  📋
+                </span>
+                <h4
+                  style={{
+                    color: "rgba(255,255,255,0.25)",
+                    fontSize: 20,
+                    margin: 0,
+                  }}
+                >
+                  Buyurtma yo'q
+                </h4>
+                <p
+                  style={{
+                    color: "rgba(255,255,255,0.15)",
+                    fontSize: 13,
+                    margin: 0,
+                  }}
+                >
                   Hali hech qanday mashina ijaraga olinmagan
                 </p>
               </div>
             ) : (
-              <div style={S.grid}>
+              <div style={S.bookingsGrid}>
                 {bookings.map((booking) => (
-                  <div
-                    key={booking.id}
-                    style={S.card}
-                    onMouseEnter={(e) =>
-                      Object.assign(
-                        (e.currentTarget as HTMLDivElement).style,
-                        S.cardHoverStyle,
-                      )
-                    }
-                    onMouseLeave={(e) =>
-                      Object.assign(
-                        (e.currentTarget as HTMLDivElement).style,
-                        S.cardBaseStyle,
-                      )
-                    }
-                  >
-                    <div style={S.imgBox}>
-                      <img src={booking.img} alt={booking.name} style={S.img} />
-                      <div style={S.imgGradient} />
-                      <span style={S.badge}>{booking.category}</span>
-                      <span style={S.bookedBadge}>✓ Aktiv</span>
+                  <div key={booking.id} style={S.bookingCard}>
+                    <div style={S.bookingImgWrap}>
+                      <img
+                        src={booking.img}
+                        alt={booking.name}
+                        style={S.bookingImg}
+                      />
+                      <div style={S.carImgGradient} />
+                      <span style={S.catBadge}>{booking.category}</span>
+                      <span style={S.activeBadge}>✓ Aktiv</span>
                     </div>
-
-                    <div style={S.body}>
-                      <h2 style={S.carName}>{booking.name}</h2>
-                      <p style={S.carDesc}>{booking.desc}</p>
-                      <div style={S.divider} />
-
-                      {/* Booking info */}
-                      <div
-                        style={{
-                          background: "rgba(255,255,255,0.04)",
-                          border: "1px solid rgba(255,255,255,0.07)",
-                          borderRadius: 14,
-                          padding: "12px 14px",
-                          display: "flex",
-                          flexDirection: "column",
-                          gap: 6,
-                        }}
-                      >
-                        <div
-                          style={{
-                            display: "flex",
-                            justifyContent: "space-between",
-                          }}
-                        >
-                          <span
-                            style={{
-                              fontSize: 12,
-                              color: "rgba(255,255,255,0.35)",
-                            }}
-                          >
-                            🗓 Muddat
-                          </span>
-                          <span style={{ fontSize: 13, color: "#fff" }}>
-                            {booking.days} kun
-                          </span>
-                        </div>
-                        <div
-                          style={{
-                            display: "flex",
-                            justifyContent: "space-between",
-                          }}
-                        >
-                          <span
-                            style={{
-                              fontSize: 12,
-                              color: "rgba(255,255,255,0.35)",
-                            }}
-                          >
-                            🕒 Sana
-                          </span>
-                          <span style={{ fontSize: 12, color: "#fff" }}>
-                            {new Date(booking.bookedAt).toLocaleDateString()}
-                          </span>
-                        </div>
+                    <div style={S.bookingBody}>
+                      <h3 style={S.bookingName}>{booking.name}</h3>
+                      <div style={S.bookingMeta}>
+                        <Row
+                          icon="👤"
+                          label="Mijoz"
+                          value={booking.customerName || "—"}
+                        />
+                        <Row
+                          icon="📧"
+                          label="Email"
+                          value={booking.customerEmail || "—"}
+                        />
+                        <Row
+                          icon="📞"
+                          label="Telefon"
+                          value={booking.customerPhone || "—"}
+                        />
+                        <Row
+                          icon="🗓"
+                          label="Muddat"
+                          value={`${booking.days} kun`}
+                        />
+                        <Row
+                          icon="🕒"
+                          label="Sana"
+                          value={new Date(
+                            booking.bookedAt,
+                          ).toLocaleDateString()}
+                        />
                       </div>
-
-                      <div style={S.priceRow}>
-                        <span style={S.priceSmall}>
+                      <div style={S.divider} />
+                      <div style={S.bookingPriceRow}>
+                        <span
+                          style={{
+                            color: "rgba(255,255,255,0.35)",
+                            fontSize: 12,
+                          }}
+                        >
                           ${booking.price?.toLocaleString()} × {booking.days}{" "}
                           kun
                         </span>
-                        <span style={S.priceBig}>
+                        <span
+                          style={{
+                            color: "#60a5fa",
+                            fontSize: 22,
+                            fontWeight: 700,
+                          }}
+                        >
                           ${booking.totalPrice?.toLocaleString()}
                         </span>
                       </div>
-
-                      {/* Cancel button */}
                       <button
-                        onClick={() => cancelBooking(booking.id, booking.carId)}
-                        style={{
-                          ...S.btn,
-                          background: "rgba(239,68,68,0.1)",
-                          border: "1px solid rgba(239,68,68,0.25)",
-                          color: "#f87171",
-                          cursor: "pointer",
-                        }}
+                        onClick={() => cancelBooking(booking.id)}
+                        style={S.cancelBtn}
                       >
                         ✕ Bekor qilish
                       </button>
@@ -551,114 +643,194 @@ const Book = ({ search }: Props) => {
     </div>
   );
 };
-const S: Record<string, React.CSSProperties> = {
+
+function Field({
+  icon,
+  label,
+  value,
+  placeholder,
+  onChange,
+  type = "text",
+  error,
+}: {
+  icon: string;
+  label: string;
+  value: string;
+  placeholder: string;
+  onChange: (v: string) => void;
+  type?: string;
+  error?: string;
+}) {
+  return (
+    <div style={S.fieldWrap}>
+      <label style={S.fieldLabel}>
+        <span style={S.fieldIcon}>{icon}</span> {label}
+      </label>
+      <input
+        type={type}
+        value={value}
+        placeholder={placeholder}
+        onChange={(e) => onChange(e.target.value)}
+        style={{
+          ...S.fieldInput,
+          ...(error ? { borderColor: "rgba(239,68,68,0.5)" } : {}),
+        }}
+      />
+      {error && <p style={S.errorText}>{error}</p>}
+    </div>
+  );
+}
+
+function Row({
+  icon,
+  label,
+  value,
+}: {
+  icon: string;
+  label: string;
+  value: string;
+}) {
+  return (
+    <div
+      style={{
+        display: "flex",
+        justifyContent: "space-between",
+        padding: "4px 0",
+      }}
+    >
+      <span style={{ fontSize: 12, color: "rgba(255,255,255,0.35)" }}>
+        {icon} {label}
+      </span>
+      <span style={{ fontSize: 13, color: "#fff" }}>{value}</span>
+    </div>
+  );
+}
+
+const S: Record<string, any> = {
   page: {
     minHeight: "100vh",
     background:
       "linear-gradient(160deg, #07070f 0%, #0d0d1f 60%, #07070f 100%)",
-    padding: "48px 20px",
+    padding: "40px 20px",
     fontFamily: "'DM Sans', 'Segoe UI', sans-serif",
     color: "#fff",
   },
-  container: {
-    maxWidth: 1300,
-    margin: "0 auto",
+  container: { maxWidth: 1200, margin: "0 auto" },
+  centered: {
+    minHeight: "100vh",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
   },
-  header: {
+  loginBox: {
+    textAlign: "center",
+    background: "rgba(255,255,255,0.04)",
+    border: "1px solid rgba(255,255,255,0.08)",
+    borderRadius: 24,
+    padding: "48px 40px",
+  },
+  signupBtn: {
+    padding: "12px 28px",
+    borderRadius: 12,
+    border: "1px solid rgba(255,255,255,0.1)",
+    background: "rgba(255,255,255,0.06)",
+    color: "#fff",
+    fontSize: 14,
+    cursor: "pointer",
+    fontFamily: "inherit",
+  },
+  backBtn: {
+    background: "rgba(255,255,255,0.06)",
+    border: "1px solid rgba(255,255,255,0.1)",
+    color: "rgba(255,255,255,0.6)",
+    padding: "8px 18px",
+    borderRadius: 10,
+    cursor: "pointer",
+    fontSize: 13,
+    fontFamily: "inherit",
+    marginBottom: 32,
+  },
+  tabRow: {
+    display: "flex",
+    flexWrap: "wrap",
+    alignItems: "flex-end",
+    justifyContent: "space-between",
     marginBottom: 40,
-    position: "relative",
-    display: "inline-block",
+    gap: 16,
   },
-  title: {
-    fontSize: 32,
+  pageTitle: {
+    fontSize: 28,
     fontWeight: 300,
     letterSpacing: -0.5,
-    margin: 0,
+    margin: "0 0 8px",
     color: "#fff",
   },
-  subtitle: {
-    fontSize: 13,
-    color: "rgba(255,255,255,0.3)",
-    marginTop: 6,
-    letterSpacing: 0.5,
-  },
   titleAccent: {
-    position: "absolute",
-    bottom: -8,
-    left: 0,
     width: 48,
     height: 2,
     background: "linear-gradient(90deg, #3b82f6, #6366f1)",
     borderRadius: 2,
   },
-  empty: {
+  tabGroup: {
     display: "flex",
-    flexDirection: "column",
-    alignItems: "center",
-    paddingTop: 100,
-    gap: 12,
-  },
-  emptyIcon: { fontSize: 72, filter: "grayscale(1) opacity(0.25)" },
-  emptyTitle: {
-    fontSize: 20,
-    fontWeight: 500,
-    color: "rgba(255,255,255,0.25)",
-    margin: 0,
-  },
-  emptyText: { fontSize: 13, color: "rgba(255,255,255,0.15)", margin: 0 },
-
-  grid: {
-    display: "grid",
-    gridTemplateColumns: "repeat(auto-fill, minmax(290px, 1fr))",
-    gap: 24,
-  },
-
-  // Card base & hover (applied via JS)
-  card: {
+    gap: 6,
     background: "rgba(255,255,255,0.04)",
     border: "1px solid rgba(255,255,255,0.07)",
+    borderRadius: 14,
+    padding: 4,
+  },
+  tabBtn: {
+    padding: "6px 16px",
+    borderRadius: 10,
+    border: "none",
+    cursor: "pointer",
+    fontSize: 13,
+    fontWeight: 600,
+    transition: "all 0.2s",
+    fontFamily: "inherit",
+  },
+  tabActive: {
+    background: "linear-gradient(135deg, #3b82f6, #6366f1)",
+    color: "#fff",
+  },
+  tabInactive: { background: "transparent", color: "rgba(255,255,255,0.35)" },
+  tabBadge: {
+    background: "rgba(255,255,255,0.2)",
+    borderRadius: 50,
+    padding: "1px 7px",
+    fontSize: 11,
+    marginLeft: 4,
+  },
+  carLayout: {
+    display: "grid",
+    gridTemplateColumns: "1fr 420px",
+    gap: 32,
+    alignItems: "start",
+  },
+  carImgWrap: {
+    position: "relative",
     borderRadius: 22,
     overflow: "hidden",
-    display: "flex",
-    flexDirection: "column",
-    transition: "all 0.3s ease",
-  },
-  cardBaseStyle: {
-    background: "rgba(255,255,255,0.04)",
-    border: "1px solid rgba(255,255,255,0.07)",
-    transform: "translateY(0px)",
-    boxShadow: "none",
-  },
-  cardHoverStyle: {
-    background: "rgba(255,255,255,0.07)",
-    border: "1px solid rgba(99,130,246,0.3)",
-    transform: "translateY(-5px)",
-    boxShadow: "0 24px 64px rgba(0,0,0,0.5), 0 0 40px rgba(59,130,246,0.08)",
-  },
-
-  imgBox: {
-    position: "relative",
     aspectRatio: "16/9",
-    overflow: "hidden",
   },
-  img: {
+  carImg: {
     width: "100%",
     height: "100%",
     objectFit: "cover",
     display: "block",
-    transition: "transform 0.5s ease",
+    transition: "transform 0.6s ease",
   },
-  imgGradient: {
+  carImgGradient: {
     position: "absolute",
     inset: 0,
     background:
       "linear-gradient(to top, rgba(7,7,15,0.85) 0%, transparent 55%)",
   },
-  badge: {
+  catBadge: {
     position: "absolute",
-    top: 12,
-    left: 12,
-    background: "rgba(59,130,246,0.8)",
+    top: 14,
+    left: 14,
+    background: "rgba(59,130,246,0.85)",
     backdropFilter: "blur(10px)",
     color: "#fff",
     fontSize: 10,
@@ -670,8 +842,8 @@ const S: Record<string, React.CSSProperties> = {
   },
   bookedBadge: {
     position: "absolute",
-    top: 12,
-    right: 12,
+    top: 14,
+    right: 14,
     background: "rgba(16,185,129,0.85)",
     backdropFilter: "blur(10px)",
     color: "#fff",
@@ -679,71 +851,288 @@ const S: Record<string, React.CSSProperties> = {
     fontWeight: 700,
     padding: "4px 12px",
     borderRadius: 50,
-    letterSpacing: 0.5,
   },
-
-  body: {
-    padding: "20px",
-    display: "flex",
-    flexDirection: "column",
-    flex: 1,
-    gap: 10,
+  activeBadge: {
+    position: "absolute",
+    top: 14,
+    right: 14,
+    background: "rgba(16,185,129,0.85)",
+    backdropFilter: "blur(10px)",
+    color: "#fff",
+    fontSize: 10,
+    fontWeight: 700,
+    padding: "4px 12px",
+    borderRadius: 50,
   },
-  carName: {
-    fontSize: 16,
-    fontWeight: 400,
-    color: "#f0f0ff",
-    margin: 0,
-    letterSpacing: 0.2,
-  },
-  carDesc: {
-    fontSize: 12,
-    color: "rgba(255,255,255,0.3)",
-    lineHeight: 1.65,
-    margin: 0,
-    display: "-webkit-box",
-    WebkitLineClamp: 2,
-    WebkitBoxOrient: "vertical",
+  infoPanel: {
+    background: "rgba(255,255,255,0.04)",
+    border: "1px solid rgba(255,255,255,0.07)",
+    borderRadius: 22,
     overflow: "hidden",
   },
-  divider: {
-    height: 1,
-    background: "rgba(255,255,255,0.06)",
-    margin: "4px 0",
+  infoPanelInner: {
+    padding: 28,
+    display: "flex",
+    flexDirection: "column",
+    gap: 16,
   },
-
-  pickerBox: {
+  carTitle: {
+    fontSize: 24,
+    fontWeight: 400,
+    margin: 0,
+    color: "#f0f0ff",
+    letterSpacing: -0.3,
+  },
+  carDesc: {
+    fontSize: 13,
+    color: "rgba(255,255,255,0.4)",
+    lineHeight: 1.7,
+    margin: 0,
+  },
+  divider: { height: 1, background: "rgba(255,255,255,0.07)" },
+  priceDisplay: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  priceValue: {
+    fontSize: 32,
+    fontWeight: 700,
+    color: "#60a5fa",
+    margin: "4px 0 0",
+    letterSpacing: -1,
+  },
+  bookBtn: {
+    width: "100%",
+    padding: "15px",
+    borderRadius: 14,
+    border: "none",
+    background: "linear-gradient(135deg, #3b82f6 0%, #6366f1 100%)",
+    color: "#fff",
+    fontSize: 15,
+    fontWeight: 600,
+    cursor: "pointer",
+    fontFamily: "inherit",
+    boxShadow: "0 4px 24px rgba(99,102,241,0.35)",
+    transition: "transform 0.2s",
+    letterSpacing: 0.3,
+  },
+  alreadyBookedBox: {
+    background: "rgba(16,185,129,0.08)",
+    border: "1px solid rgba(16,185,129,0.2)",
+    borderRadius: 14,
+    padding: "14px 16px",
+    color: "#34d399",
+    fontSize: 13,
+    display: "flex",
+    flexDirection: "column",
+    gap: 10,
+  },
+  viewBookingBtn: {
+    background: "rgba(16,185,129,0.15)",
+    border: "1px solid rgba(16,185,129,0.3)",
+    color: "#34d399",
+    padding: "8px 14px",
+    borderRadius: 10,
+    cursor: "pointer",
+    fontSize: 13,
+    fontFamily: "inherit",
+    alignSelf: "flex-start",
+  },
+  infoCards: {
+    display: "grid",
+    gridTemplateColumns: "1fr 1fr",
+    gap: 10,
+    marginTop: 4,
+  },
+  infoCard: {
+    background: "rgba(255,255,255,0.04)",
+    border: "1px solid rgba(255,255,255,0.07)",
+    borderRadius: 14,
+    padding: "12px 14px",
+    display: "flex",
+    flexDirection: "column",
+    gap: 4,
+  },
+  infoCardIcon: { fontSize: 18 },
+  infoCardLabel: {
+    fontSize: 11,
+    color: "rgba(255,255,255,0.3)",
+    letterSpacing: 0.5,
+  },
+  infoCardValue: { fontSize: 13, color: "#fff", fontWeight: 500 },
+  empty: {
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    paddingTop: 100,
+    gap: 12,
+  },
+  bookingsGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))",
+    gap: 24,
+  },
+  bookingCard: {
+    background: "rgba(255,255,255,0.04)",
+    border: "1px solid rgba(255,255,255,0.07)",
+    borderRadius: 22,
+    overflow: "hidden",
+  },
+  bookingImgWrap: {
+    position: "relative",
+    aspectRatio: "16/9",
+    overflow: "hidden",
+  },
+  bookingImg: {
+    width: "100%",
+    height: "100%",
+    objectFit: "cover",
+    display: "block",
+  },
+  bookingBody: {
+    padding: "18px 20px",
+    display: "flex",
+    flexDirection: "column",
+    gap: 10,
+  },
+  bookingName: { fontSize: 16, fontWeight: 400, margin: 0, color: "#f0f0ff" },
+  bookingMeta: {
+    background: "rgba(255,255,255,0.04)",
+    border: "1px solid rgba(255,255,255,0.07)",
+    borderRadius: 12,
+    padding: "10px 12px",
+  },
+  bookingPriceRow: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    padding: "4px 0",
+  },
+  cancelBtn: {
+    width: "100%",
+    padding: "12px",
+    borderRadius: 12,
+    border: "1px solid rgba(239,68,68,0.25)",
+    background: "rgba(239,68,68,0.08)",
+    color: "#f87171",
+    fontSize: 13,
+    fontWeight: 600,
+    cursor: "pointer",
+    fontFamily: "inherit",
+  },
+  overlay: {
+    position: "fixed",
+    inset: 0,
+    background: "rgba(0,0,0,0.75)",
+    backdropFilter: "blur(8px)",
+    zIndex: 1000,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 20,
+  },
+  modal: {
+    background: "#0d0d1f",
+    border: "1px solid rgba(255,255,255,0.1)",
+    borderRadius: 24,
+    width: "100%",
+    maxWidth: 520,
+    maxHeight: "90vh",
+    overflowY: "auto",
+    padding: 28,
+    display: "flex",
+    flexDirection: "column",
+    gap: 18,
+    boxShadow: "0 32px 80px rgba(0,0,0,0.8)",
+  },
+  modalHeader: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+  },
+  modalTitle: { fontSize: 20, fontWeight: 400, margin: 0, color: "#fff" },
+  modalSub: {
+    fontSize: 13,
+    color: "rgba(255,255,255,0.35)",
+    margin: "4px 0 0",
+  },
+  closeBtn: {
+    background: "rgba(255,255,255,0.06)",
+    border: "1px solid rgba(255,255,255,0.1)",
+    color: "rgba(255,255,255,0.5)",
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    cursor: "pointer",
+    fontSize: 14,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    fontFamily: "inherit",
+    flexShrink: 0,
+  },
+  miniPreview: {
+    display: "flex",
+    gap: 14,
+    alignItems: "center",
     background: "rgba(255,255,255,0.04)",
     border: "1px solid rgba(255,255,255,0.07)",
     borderRadius: 14,
     padding: "12px 14px",
   },
-  pickerLabel: {
-    fontSize: 11,
-    color: "rgba(255,255,255,0.35)",
-    display: "block",
-    marginBottom: 10,
-    letterSpacing: 0.5,
+  miniImg: {
+    width: 72,
+    height: 50,
+    borderRadius: 10,
+    objectFit: "cover",
+    flexShrink: 0,
   },
-  pickerRow: {
+  miniTotal: {
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "flex-end",
+    gap: 2,
+    flexShrink: 0,
+  },
+  formGrid: { display: "flex", flexDirection: "column", gap: 14 },
+  fieldWrap: { display: "flex", flexDirection: "column", gap: 8 },
+  fieldLabel: {
+    fontSize: 12,
+    color: "rgba(255,255,255,0.45)",
+    letterSpacing: 0.3,
     display: "flex",
     alignItems: "center",
-    gap: 8,
+    gap: 6,
   },
+  fieldIcon: { fontSize: 14 },
+  fieldInput: {
+    background: "rgba(255,255,255,0.06)",
+    border: "1px solid rgba(255,255,255,0.1)",
+    borderRadius: 12,
+    padding: "12px 14px",
+    color: "#fff",
+    fontSize: 14,
+    outline: "none",
+    fontFamily: "inherit",
+    width: "100%",
+    boxSizing: "border-box",
+  },
+  errorText: { color: "#f87171", fontSize: 11, margin: 0 },
+  pickerRow: { display: "flex", alignItems: "center", gap: 10 },
   pickerBtn: {
-    width: 34,
-    height: 34,
+    width: 38,
+    height: 38,
     borderRadius: 10,
     border: "1px solid rgba(255,255,255,0.1)",
     background: "rgba(255,255,255,0.06)",
     color: "#fff",
-    fontSize: 18,
+    fontSize: 20,
     cursor: "pointer",
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
     fontFamily: "inherit",
-    transition: "all 0.15s",
     flexShrink: 0,
   },
   pickerInput: {
@@ -752,505 +1141,45 @@ const S: Record<string, React.CSSProperties> = {
     background: "rgba(255,255,255,0.08)",
     border: "1px solid rgba(255,255,255,0.1)",
     borderRadius: 10,
-    padding: "6px",
+    padding: "8px",
     color: "#fff",
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: 700,
     outline: "none",
     fontFamily: "inherit",
   },
-
-  priceRow: {
+  priceSummary: {
     display: "flex",
     justifyContent: "space-between",
     alignItems: "center",
-    padding: "8px 0",
+    background: "rgba(59,130,246,0.07)",
+    border: "1px solid rgba(59,130,246,0.15)",
+    borderRadius: 14,
+    padding: "12px 16px",
   },
-  priceSmall: {
-    fontSize: 12,
-    color: "rgba(255,255,255,0.3)",
-  },
-  priceBig: {
-    fontSize: 24,
-    fontWeight: 700,
-    color: "#60a5fa",
-    letterSpacing: -0.5,
-  },
-
-  btn: {
+  submitBtn: {
     width: "100%",
-    padding: "13px",
+    padding: "15px",
     borderRadius: 14,
     border: "none",
-    fontSize: 14,
-    fontWeight: 600,
-    cursor: "pointer",
-    fontFamily: "'DM Sans', sans-serif",
-    transition: "all 0.2s",
-    letterSpacing: 0.3,
-    marginTop: 4,
-  },
-  btnNormal: {
     background: "linear-gradient(135deg, #3b82f6 0%, #6366f1 100%)",
     color: "#fff",
-    boxShadow: "0 4px 20px rgba(99,102,241,0.3)",
+    fontSize: 15,
+    fontWeight: 600,
+    cursor: "pointer",
+    fontFamily: "inherit",
+    boxShadow: "0 4px 24px rgba(99,102,241,0.35)",
+    transition: "all 0.2s",
+    letterSpacing: 0.3,
   },
-  btnBooked: {
-    background: "rgba(16,185,129,0.15)",
-    border: "1px solid rgba(16,185,129,0.3)",
-    color: "#34d399",
-    cursor: "default",
+  successBox: {
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    padding: "40px 20px",
+    textAlign: "center",
   },
-  btnLoading: {
-    background: "rgba(255,255,255,0.05)",
-    color: "rgba(255,255,255,0.4)",
-    cursor: "not-allowed",
-  },
+  successIcon: { fontSize: 56 },
 };
 
 export default Book;
-
-// import {
-//   collection,
-//   addDoc,
-//   getDocs,
-//   query,
-//   where,
-//   deleteDoc,
-//   doc,
-// } from "firebase/firestore";
-// import { db, auth } from "../firebase.config";
-// import { useEffect, useState } from "react";
-// import { onAuthStateChanged } from "firebase/auth";
-// import { useNavigate } from "react-router-dom";
-// import type { Car } from "../utils/Home";
-
-// interface Props {
-//   search: string;
-// }
-
-// interface Booking {
-//   id: string;
-//   carId: string;
-//   userId: string;
-//   name: string;
-//   price: number;
-//   img: string;
-//   category: string;
-//   desc: string;
-//   days: number;
-//   totalPrice: number;
-//   bookedAt: string;
-// }
-
-// const Book = ({ search }: Props) => {
-//   const [cars, setCars] = useState<(Car & { id: string })[]>([]);
-//   const [bookings, setBookings] = useState<Booking[]>([]);
-//   const [days, setDays] = useState<{ [id: string]: number }>({});
-//   const [loading, setLoading] = useState<{ [id: string]: boolean }>({});
-//   const [booked, setBooked] = useState<{ [id: string]: boolean }>({});
-//   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
-//   const [, setIsAdmin] = useState(false);
-//   const [tab, setTab] = useState<"cars" | "bookings">("cars");
-//   const navigate = useNavigate();
-
-//   useEffect(() => {
-//     const localUser = localStorage.getItem("user");
-//     if (localUser) {
-//       const userData = JSON.parse(localUser);
-//       if (userData.email === "azizbeknarzullayevo1o@gmail.com") {
-//         setIsAdmin(true);
-//         setCurrentUserId("admin");
-//         getCars();
-//         getBookings("admin");
-//         return;
-//       }
-//     }
-//     const unsubscribe = onAuthStateChanged(auth, (user) => {
-//       if (user) {
-//         setCurrentUserId(user.uid);
-//         getCars();
-//         getBookings(user.uid);
-//       } else {
-//         setCurrentUserId(null);
-//         setBookings([]);
-//       }
-//     });
-//     return () => unsubscribe();
-//   }, []);
-
-//   async function getCars() {
-//     const snapshot = await getDocs(collection(db, "cars"));
-//     const arr = snapshot.docs.map((d) => ({ ...(d.data() as Car), id: d.id }));
-//     setCars(arr);
-//     const initialDays: { [id: string]: number } = {};
-//     arr.forEach((car) => (initialDays[car.id] = 1));
-//     setDays(initialDays);
-//   }
-
-//   async function getBookings(userId: string) {
-//     const q = query(collection(db, "bookings"), where("userId", "==", userId));
-//     const snapshot = await getDocs(q);
-//     const items = snapshot.docs.map((d) => ({
-//       id: d.id,
-//       ...d.data(),
-//     })) as Booking[];
-//     setBookings(items);
-//     const bookedMap: { [id: string]: boolean } = {};
-//     items.forEach((b) => (bookedMap[b.carId] = true));
-//     setBooked(bookedMap);
-//   }
-
-//   async function handleBook(car: Car & { id: string }) {
-//     if (!currentUserId) return;
-//     const carDays = days[car.id] ?? 1;
-//     const totalPrice = (car.price ?? 0) * carDays;
-//     setLoading((prev) => ({ ...prev, [car.id]: true }));
-//     try {
-//       await addDoc(collection(db, "bookings"), {
-//         carId: car.id,
-//         userId: currentUserId,
-//         name: car.name,
-//         price: car.price,
-//         img: car.img,
-//         category: car.category,
-//         desc: car.desc,
-//         days: carDays,
-//         totalPrice,
-//         bookedAt: new Date().toISOString(),
-//       });
-//       getBookings(currentUserId);
-//     } catch (e) {
-//       console.error(e);
-//     } finally {
-//       setLoading((prev) => ({ ...prev, [car.id]: false }));
-//     }
-//   }
-
-//   async function cancelBooking(bookingId: string, carId: string) {
-//     await deleteDoc(doc(db, "bookings", bookingId));
-//     setBooked((prev) => ({ ...prev, [carId]: false }));
-//     if (currentUserId) getBookings(currentUserId);
-//   }
-
-//   // ── Login bo'lmagan ──────────────────────────────────────────────
-//   if (!currentUserId) {
-//     return (
-//       <div className="min-h-screen bg-gradient-to-br from-[#07070f] via-[#0d0d1f] to-[#07070f] flex items-center justify-center px-4">
-//         <div className="bg-white/5 border border-white/10 rounded-3xl p-10 text-center max-w-sm w-full shadow-2xl">
-//           <div className="text-6xl mb-5">🔒</div>
-//           <h2 className="text-white text-xl font-light mb-2">
-//             Ijaraga olish uchun kiring
-//           </h2>
-//           <p className="text-white/40 text-sm mb-8">
-//             Hisobingizga kiring yoki yangi hisob yarating
-//           </p>
-//           <div className="flex flex-col sm:flex-row gap-3">
-//             <button
-//               onClick={() => navigate("/signin")}
-//               className="flex-1 py-3 rounded-xl bg-gradient-to-r from-blue-500 to-indigo-500 text-white font-semibold text-sm hover:opacity-90 transition"
-//             >
-//               Kirish
-//             </button>
-//             <button
-//               onClick={() => navigate("/signup")}
-//               className="flex-1 py-3 rounded-xl bg-white/10 border border-white/10 text-white font-semibold text-sm hover:bg-white/15 transition"
-//             >
-//               Ro'yxatdan o'tish
-//             </button>
-//           </div>
-//         </div>
-//       </div>
-//     );
-//   }
-
-//   const filteredCars = cars.filter((car) =>
-//     car.name?.toLowerCase().includes(search.toLowerCase()),
-//   );
-
-//   return (
-//     <div className="min-h-screen bg-gradient-to-br from-[#07070f] via-[#0d0d1f] to-[#07070f] px-4 sm:px-6 py-10 text-white font-sans">
-//       <div className="max-w-7xl mx-auto">
-//         {/* ── Header + Tabs ── */}
-//         <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-5 mb-10">
-//           {/* Title */}
-//           <div className="relative inline-block">
-//             <h1 className="text-2xl sm:text-3xl font-light tracking-tight text-white">
-//               {tab === "cars" ? "Mashinalar" : "Mening buyurtmalarim"}
-//             </h1>
-//             <p className="text-xs text-white/30 mt-1.5 tracking-wide">
-//               {tab === "cars"
-//                 ? `${filteredCars.length} ta mavjud`
-//                 : `${bookings.length} ta buyurtma`}
-//             </p>
-//             <span className="absolute -bottom-2 left-0 w-12 h-0.5 bg-gradient-to-r from-blue-500 to-indigo-500 rounded-full" />
-//           </div>
-
-//           {/* Tab switcher */}
-//           <div className="flex bg-white/5 border border-white/10 rounded-2xl p-1 w-full sm:w-auto">
-//             <button
-//               onClick={() => setTab("cars")}
-//               className={`flex-1 sm:flex-none px-5 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 ${
-//                 tab === "cars"
-//                   ? "bg-gradient-to-r from-blue-500 to-indigo-500 text-white shadow-lg"
-//                   : "text-white/35 hover:text-white/60"
-//               }`}
-//             >
-//               🚗 Mashinalar
-//             </button>
-//             <button
-//               onClick={() => setTab("bookings")}
-//               className={`flex-1 sm:flex-none px-5 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 flex items-center gap-2 justify-center ${
-//                 tab === "bookings"
-//                   ? "bg-gradient-to-r from-blue-500 to-indigo-500 text-white shadow-lg"
-//                   : "text-white/35 hover:text-white/60"
-//               }`}
-//             >
-//               📋 Buyurtmalarim
-//               {bookings.length > 0 && (
-//                 <span className="bg-white/20 text-white text-xs rounded-full px-2 py-0.5">
-//                   {bookings.length}
-//                 </span>
-//               )}
-//             </button>
-//           </div>
-//         </div>
-
-//         {/* ── MASHINALAR TAB ── */}
-//         {tab === "cars" && (
-//           <>
-//             {filteredCars.length === 0 ? (
-//               <div className="flex flex-col items-center justify-center pt-32 gap-3">
-//                 <span className="text-7xl grayscale opacity-20">🚗</span>
-//                 <h4 className="text-xl font-medium text-white/25">
-//                   Mashina topilmadi
-//                 </h4>
-//                 <p className="text-sm text-white/15">
-//                   Boshqa kalit so'z bilan urinib ko'ring
-//                 </p>
-//               </div>
-//             ) : (
-//               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
-//                 {filteredCars.map((car) => {
-//                   const carDays = days[car.id] ?? 1;
-//                   const totalPrice = (car.price ?? 0) * carDays;
-//                   const isBooked = booked[car.id];
-//                   const isLoading = loading[car.id];
-
-//                   return (
-//                     <div
-//                       key={car.id}
-//                       className="group bg-white/[0.04] border border-white/[0.07] rounded-2xl overflow-hidden flex flex-col hover:-translate-y-1.5 hover:bg-white/[0.07] hover:border-blue-500/30 hover:shadow-2xl transition-all duration-300"
-//                     >
-//                       {/* Image */}
-//                       <div className="relative aspect-video overflow-hidden">
-//                         <img
-//                           src={car.img}
-//                           alt={car.name}
-//                           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-//                         />
-//                         <div className="absolute inset-0 bg-gradient-to-t from-[#07070f]/80 to-transparent" />
-//                         <span className="absolute top-3 left-3 bg-blue-500/80 backdrop-blur-md text-white text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-widest">
-//                           {car.category}
-//                         </span>
-//                         {isBooked && (
-//                           <span className="absolute top-3 right-3 bg-emerald-500/85 backdrop-blur-md text-white text-[10px] font-bold px-3 py-1 rounded-full">
-//                             ✓ Buyurtma
-//                           </span>
-//                         )}
-//                       </div>
-
-//                       {/* Body */}
-//                       <div className="p-5 flex flex-col flex-1 gap-3">
-//                         <div>
-//                           <h2 className="text-[15px] font-normal text-white/90 tracking-wide">
-//                             {car.name}
-//                           </h2>
-//                           <p className="text-xs text-white/30 leading-relaxed mt-1 line-clamp-2">
-//                             {car.desc}
-//                           </p>
-//                         </div>
-
-//                         <hr className="border-white/[0.06]" />
-
-//                         {/* Days picker */}
-//                         <div className="bg-white/[0.04] border border-white/[0.07] rounded-xl p-3">
-//                           <label className="text-[11px] text-white/35 block mb-2 tracking-wide">
-//                             🗓 Necha kun?
-//                           </label>
-//                           <div className="flex items-center gap-2">
-//                             <button
-//                               onClick={() =>
-//                                 setDays((prev) => ({
-//                                   ...prev,
-//                                   [car.id]: Math.max(
-//                                     1,
-//                                     (prev[car.id] ?? 1) - 1,
-//                                   ),
-//                                 }))
-//                               }
-//                               className="w-9 h-9 rounded-lg border border-white/10 bg-white/[0.06] text-white text-lg hover:bg-white/10 transition flex items-center justify-center shrink-0"
-//                             >
-//                               −
-//                             </button>
-//                             <input
-//                               type="number"
-//                               min={1}
-//                               value={carDays}
-//                               onChange={(e) =>
-//                                 setDays((prev) => ({
-//                                   ...prev,
-//                                   [car.id]: Math.max(1, Number(e.target.value)),
-//                                 }))
-//                               }
-//                               className="flex-1 text-center bg-white/[0.08] border border-white/10 rounded-lg py-1.5 text-white text-[15px] font-bold outline-none"
-//                             />
-//                             <button
-//                               onClick={() =>
-//                                 setDays((prev) => ({
-//                                   ...prev,
-//                                   [car.id]: (prev[car.id] ?? 1) + 1,
-//                                 }))
-//                               }
-//                               className="w-9 h-9 rounded-lg border border-white/10 bg-white/[0.06] text-white text-lg hover:bg-white/10 transition flex items-center justify-center shrink-0"
-//                             >
-//                               +
-//                             </button>
-//                           </div>
-//                         </div>
-
-//                         {/* Price */}
-//                         <div className="flex justify-between items-center py-1">
-//                           <span className="text-xs text-white/30">
-//                             ${car.price?.toLocaleString()} × {carDays} kun
-//                           </span>
-//                           <span className="text-2xl font-bold text-blue-400 tracking-tight">
-//                             ${totalPrice.toLocaleString()}
-//                           </span>
-//                         </div>
-
-//                         {/* Book button */}
-//                         <button
-//                           onClick={() => handleBook(car)}
-//                           disabled={isLoading || isBooked}
-//                           className={`w-full py-3 rounded-xl text-sm font-semibold tracking-wide transition-all mt-auto ${
-//                             isBooked
-//                               ? "bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 cursor-default"
-//                               : isLoading
-//                                 ? "bg-white/5 text-white/30 cursor-not-allowed"
-//                                 : "bg-gradient-to-r from-blue-500 to-indigo-500 text-white hover:opacity-90 shadow-lg shadow-indigo-500/20"
-//                           }`}
-//                         >
-//                           {isLoading
-//                             ? "⏳ Yuklanmoqda..."
-//                             : isBooked
-//                               ? "✅ Buyurtma berildi!"
-//                               : "Ijaraga olish →"}
-//                         </button>
-//                       </div>
-//                     </div>
-//                   );
-//                 })}
-//               </div>
-//             )}
-//           </>
-//         )}
-
-//         {/* ── BUYURTMALAR TAB ── */}
-//         {tab === "bookings" && (
-//           <>
-//             {bookings.length === 0 ? (
-//               <div className="flex flex-col items-center justify-center pt-32 gap-3">
-//                 <span className="text-7xl grayscale opacity-20">📋</span>
-//                 <h4 className="text-xl font-medium text-white/25">
-//                   Buyurtma yo'q
-//                 </h4>
-//                 <p className="text-sm text-white/15">
-//                   Hali hech qanday mashina ijaraga olinmagan
-//                 </p>
-//               </div>
-//             ) : (
-//               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
-//                 {bookings.map((booking) => (
-//                   <div
-//                     key={booking.id}
-//                     className="group bg-white/[0.04] border border-white/[0.07] rounded-2xl overflow-hidden flex flex-col hover:-translate-y-1.5 hover:bg-white/[0.07] hover:border-blue-500/30 hover:shadow-2xl transition-all duration-300"
-//                   >
-//                     {/* Image */}
-//                     <div className="relative aspect-video overflow-hidden">
-//                       <img
-//                         src={booking.img}
-//                         alt={booking.name}
-//                         className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-//                       />
-//                       <div className="absolute inset-0 bg-gradient-to-t from-[#07070f]/80 to-transparent" />
-//                       <span className="absolute top-3 left-3 bg-blue-500/80 backdrop-blur-md text-white text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-widest">
-//                         {booking.category}
-//                       </span>
-//                       <span className="absolute top-3 right-3 bg-emerald-500/85 backdrop-blur-md text-white text-[10px] font-bold px-3 py-1 rounded-full">
-//                         ✓ Aktiv
-//                       </span>
-//                     </div>
-
-//                     {/* Body */}
-//                     <div className="p-5 flex flex-col flex-1 gap-3">
-//                       <div>
-//                         <h2 className="text-[15px] font-normal text-white/90 tracking-wide">
-//                           {booking.name}
-//                         </h2>
-//                         <p className="text-xs text-white/30 leading-relaxed mt-1 line-clamp-2">
-//                           {booking.desc}
-//                         </p>
-//                       </div>
-
-//                       <hr className="border-white/[0.06]" />
-
-//                       {/* Info */}
-//                       <div className="bg-white/[0.04] border border-white/[0.07] rounded-xl p-3 flex flex-col gap-2">
-//                         <div className="flex justify-between items-center">
-//                           <span className="text-xs text-white/35">
-//                             🗓 Muddat
-//                           </span>
-//                           <span className="text-sm text-white font-medium">
-//                             {booking.days} kun
-//                           </span>
-//                         </div>
-//                         <div className="flex justify-between items-center">
-//                           <span className="text-xs text-white/35">🕒 Sana</span>
-//                           <span className="text-xs text-white/70">
-//                             {new Date(booking.bookedAt).toLocaleDateString()}
-//                           </span>
-//                         </div>
-//                       </div>
-
-//                       {/* Price */}
-//                       <div className="flex justify-between items-center py-1">
-//                         <span className="text-xs text-white/30">
-//                           ${booking.price?.toLocaleString()} × {booking.days}{" "}
-//                           kun
-//                         </span>
-//                         <span className="text-2xl font-bold text-blue-400 tracking-tight">
-//                           ${booking.totalPrice?.toLocaleString()}
-//                         </span>
-//                       </div>
-
-//                       {/* Cancel button */}
-//                       <button
-//                         onClick={() => cancelBooking(booking.id, booking.carId)}
-//                         className="w-full py-3 rounded-xl text-sm font-semibold bg-red-500/10 border border-red-500/25 text-red-400 hover:bg-red-500/20 transition mt-auto"
-//                       >
-//                         ✕ Bekor qilish
-//                       </button>
-//                     </div>
-//                   </div>
-//                 ))}
-//               </div>
-//             )}
-//           </>
-//         )}
-//       </div>
-//     </div>
-//   );
-// };
-
-// export default Book;

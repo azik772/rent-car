@@ -58,7 +58,7 @@ const App = () => {
               Sign Up
             </Link>
             <Link
-              to={"/bookings"}
+              to={"/book"}
               className="px-4 py-2 text-sm font-semibold text-decoration-none text-white bg-green-600 rounded-xl hover:bg-green-700 transition duration-200 flex items-center gap-1"
             >
               🗓 My Bookings
@@ -118,7 +118,7 @@ const App = () => {
             </Link>
             <Link
               onClick={() => setMenuOpen(false)}
-              to={"/bookings"}
+              to={"/book"}
               className="w-full text-center py-2.5 text-decoration-none text-sm font-semibold text-white bg-green-600 rounded-xl hover:bg-green-700 transition duration-200"
             >
               🗓 My Bookings
@@ -144,7 +144,7 @@ const App = () => {
         <Route path="/signin" element={<SignIn />} />
         <Route path="/signup" element={<SignUp />} />
         <Route path="/cars" element={<Cars search={search} />} />
-        <Route path="/bookings" element={<Book search={search}/>}/>
+        <Route path="/book" element={<Book search={search}/>}/>
       </Routes>
     </div>
   );
