@@ -4,12 +4,14 @@ import { auth, db } from "../firebase.config";
 import type { Car } from "./Home";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useLang } from "../LangContext";
 
 interface Props {
   search?: string;
 }
 
 const Cars = ({ search = "" }: Props) => {
+  const { t } = useLang();
   const navigate = useNavigate();
   const [locationSearch, setLocationSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("");
@@ -23,15 +25,10 @@ const Cars = ({ search = "" }: Props) => {
   async function getProducts() {
     setLoading(true);
     try {
-      const carsCol = collection(db, "cars");
-      const res = await getDocs(carsCol);
-      const arr = res.docs.map((itm) => ({
-        ...(itm.data() as Car),
-        id: itm.id,
-      }));
-      setCars(arr);
+      const res = await getDocs(collection(db, "cars"));
+      setCars(res.docs.map((itm) => ({ ...(itm.data() as Car), id: itm.id })));
     } catch (error) {
-      console.error("❌ Mashinalarni olishda xatolik:", error);
+      console.error("❌", error);
     } finally {
       setLoading(false);
     }
@@ -51,11 +48,7 @@ const Cars = ({ search = "" }: Props) => {
       navigate("/signup");
       return;
     }
-
-  
-      alert(`✅ ${car.name} savatga qo'shildi!`);
-       navigate("/book", { state: { car } });
- 
+    navigate("/book", { state: { car } });
   }
 
   const filteredCars = cars.filter((car) => {
@@ -73,20 +66,19 @@ const Cars = ({ search = "" }: Props) => {
     return matchesSearch && matchesLocation && matchesCategory;
   });
 
-  const categories = ["", "economy", "standart", "electro", "luxury"];
-  const categoryLabels: Record<string, string> = {
-    "": "Barchasi",
-    economy: "Economy",
-    standart: "Standart",
-    electro: "Elektromobil",
-    luxury: "Luxury",
-  };
+  const categories = [
+    { value: "", label: t.all },
+    { value: "economy", label: t.economy },
+    { value: "standart", label: t.standart },
+    { value: "electro", label: t.electro },
+    { value: "luxury", label: t.luxury },
+  ];
 
   if (loading) {
     return (
       <div style={styles.loadingWrapper}>
         <div style={styles.spinner} />
-        <p style={styles.loadingText}>Yuklanmoqda...</p>
+        <p style={styles.loadingText}>Loading...</p>
       </div>
     );
   }
@@ -96,11 +88,11 @@ const Cars = ({ search = "" }: Props) => {
       {/* Filter Bar */}
       <div style={styles.filterBar}>
         <div style={styles.filterGroup}>
-          <label style={styles.filterLabel}>📍 Joylashuv</label>
+          <label style={styles.filterLabel}>📍 {t.location}</label>
           <input
             type="text"
             style={styles.input}
-            placeholder="Shahar yoki manzil..."
+            placeholder={t.locationPlaceholder}
             value={locationSearch}
             onChange={(e) => setLocationSearch(e.target.value)}
             onFocus={(e) => Object.assign(e.target.style, styles.inputFocus)}
@@ -109,18 +101,18 @@ const Cars = ({ search = "" }: Props) => {
         </div>
 
         <div style={styles.filterGroup}>
-          <label style={styles.filterLabel}>🏷 Kategoriya</label>
+          <label style={styles.filterLabel}>🏷 {t.category}</label>
           <div style={styles.categoryTabs}>
             {categories.map((cat) => (
               <button
-                key={cat}
+                key={cat.value}
                 style={{
                   ...styles.catTab,
-                  ...(categoryFilter === cat ? styles.catTabActive : {}),
+                  ...(categoryFilter === cat.value ? styles.catTabActive : {}),
                 }}
-                onClick={() => setCategoryFilter(cat)}
+                onClick={() => setCategoryFilter(cat.value)}
               >
-                {categoryLabels[cat]}
+                {cat.label}
               </button>
             ))}
           </div>
@@ -134,23 +126,18 @@ const Cars = ({ search = "" }: Props) => {
               setCategoryFilter("");
             }}
           >
-            ✕ Tozalash
+            {t.clear}
           </button>
         )}
       </div>
 
-      {/* Results count */}
-      <p style={styles.resultsCount}>
-        {filteredCars.length} ta mashina topildi
-      </p>
+      <p style={styles.resultsCount}>{t.carsFound(filteredCars.length)}</p>
 
       {filteredCars.length === 0 ? (
         <div style={styles.emptyState}>
           <div style={styles.emptyIcon}>🚗</div>
-          <h4 style={styles.emptyTitle}>Mashina topilmadi</h4>
-          <p style={styles.emptyText}>
-            Boshqa kalit so'z yoki filtr bilan urinib ko'ring
-          </p>
+          <h4 style={styles.emptyTitle}>{t.notFound}</h4>
+          <p style={styles.emptyText}>{t.notFoundSub}</p>
         </div>
       ) : (
         <div style={styles.grid}>
@@ -164,6 +151,7 @@ const Cars = ({ search = "" }: Props) => {
 };
 
 const CarCard = ({ car, onBook }: { car: Car; onBook: (car: Car) => void }) => {
+  const { t } = useLang();
   const [hovered, setHovered] = useState(false);
 
   return (
@@ -172,7 +160,6 @@ const CarCard = ({ car, onBook }: { car: Car; onBook: (car: Car) => void }) => {
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
     >
-      {/* Image */}
       <div style={styles.imgWrapper}>
         <img
           src={car.img}
@@ -187,17 +174,16 @@ const CarCard = ({ car, onBook }: { car: Car; onBook: (car: Car) => void }) => {
         <span style={styles.locationBadge}>📍 {car.location}</span>
       </div>
 
-      {/* Content */}
       <div style={styles.cardBody}>
         <h2 style={styles.carName}>{car.name}</h2>
         <p style={styles.carDesc}>{car.desc}</p>
 
         <div style={styles.cardFooter}>
           <div>
-            <span style={styles.priceLabel}>Kunlik narx</span>
+            <span style={styles.priceLabel}>{t.dailyPrice}</span>
             <div style={styles.price}>
               ${car.price?.toLocaleString()}
-              <span style={styles.perDay}>/kun</span>
+              <span style={styles.perDay}>{t.perDay}</span>
             </div>
           </div>
           <div style={styles.stars}>★★★★☆</div>
@@ -207,7 +193,7 @@ const CarCard = ({ car, onBook }: { car: Car; onBook: (car: Car) => void }) => {
           style={{ ...styles.bookBtn, ...(hovered ? styles.bookBtnHover : {}) }}
           onClick={() => onBook(car)}
         >
-          Ijaraga Olish →
+          {t.bookBtn}
         </button>
       </div>
     </div>
@@ -236,11 +222,7 @@ const styles: Record<string, React.CSSProperties> = {
     alignItems: "flex-end",
     backdropFilter: "blur(20px)",
   },
-  filterGroup: {
-    display: "flex",
-    flexDirection: "column",
-    gap: 8,
-  },
+  filterGroup: { display: "flex", flexDirection: "column", gap: 8 },
   filterLabel: {
     fontSize: 11,
     color: "rgba(255,255,255,0.4)",
@@ -269,11 +251,7 @@ const styles: Record<string, React.CSSProperties> = {
     width: 240,
     outline: "none",
   },
-  categoryTabs: {
-    display: "flex",
-    gap: 8,
-    flexWrap: "wrap",
-  },
+  categoryTabs: { display: "flex", gap: 8, flexWrap: "wrap" },
   catTab: {
     padding: "8px 16px",
     borderRadius: 50,
@@ -332,11 +310,7 @@ const styles: Record<string, React.CSSProperties> = {
     transform: "translateY(-4px)",
     boxShadow: "0 20px 60px rgba(0,0,0,0.5), 0 0 30px rgba(59,130,246,0.1)",
   },
-  imgWrapper: {
-    position: "relative",
-    overflow: "hidden",
-    aspectRatio: "16/9",
-  },
+  imgWrapper: { position: "relative", overflow: "hidden", aspectRatio: "16/9" },
   img: {
     width: "100%",
     height: "100%",
@@ -423,11 +397,7 @@ const styles: Record<string, React.CSSProperties> = {
     color: "rgba(255,255,255,0.3)",
     marginLeft: 4,
   },
-  stars: {
-    color: "#fbbf24",
-    fontSize: 13,
-    letterSpacing: 1,
-  },
+  stars: { color: "#fbbf24", fontSize: 13, letterSpacing: 1 },
   bookBtn: {
     marginTop: 16,
     width: "100%",
@@ -464,10 +434,7 @@ const styles: Record<string, React.CSSProperties> = {
     borderTop: "3px solid #3b82f6",
     borderRadius: "50%",
   },
-  loadingText: {
-    color: "rgba(255,255,255,0.3)",
-    fontSize: 14,
-  },
+  loadingText: { color: "rgba(255,255,255,0.3)", fontSize: 14 },
   emptyState: {
     display: "flex",
     flexDirection: "column",
@@ -476,21 +443,14 @@ const styles: Record<string, React.CSSProperties> = {
     padding: "80px 0",
     gap: 12,
   },
-  emptyIcon: {
-    fontSize: 72,
-    filter: "grayscale(1) opacity(0.3)",
-  },
+  emptyIcon: { fontSize: 72, filter: "grayscale(1) opacity(0.3)" },
   emptyTitle: {
     fontSize: 22,
     fontWeight: 600,
     color: "rgba(255,255,255,0.3)",
     margin: 0,
   },
-  emptyText: {
-    fontSize: 14,
-    color: "rgba(255,255,255,0.2)",
-    margin: 0,
-  },
+  emptyText: { fontSize: 14, color: "rgba(255,255,255,0.2)", margin: 0 },
 };
 
 export default Cars;
